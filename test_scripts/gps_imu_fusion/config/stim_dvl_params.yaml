@@ -1,0 +1,26 @@
+imu_data_file: /data/NTNU/data/dvl_imu_december/txtfiles/imu_dvl_pipeline_following_1/df_imu.csv
+dvl_data_file: /data/NTNU/data/dvl_imu_december/txtfiles/imu_dvl_pipeline_following_1/df_dvl.csv
+fusion_log_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/dvl_imu_fusion.txt
+gt_file: ""
+
+g: 9.81
+#accelerometer_sigma : 0.001119
+#gyroscope_sigma : 0.000048
+#integration_sigma : 0.000000
+#accelerometer_bias_sigma : 0.000167
+#gyroscope_bias_sigma : 0.001947
+imu_rest_time_max: 1702402435.053195  # sim squar - 1717510310.6926155          # sim straight -1717514483.4154863
+
+Tbd:
+  - [1.0,  0.0,   0.0,  0.0]
+  - [0.0, -1.0,   0.0,  0.0]
+  - [0.0,  0.0,  -1.0, -0.36]
+  - [0.0,  0.0,   0.0, 1.0]
+#  - [ 1.0,  0.0,   0.0,  0.0 ]
+#    - [ 0.0, 1.0,   0.0,  0.0 ]
+#    - [ 0.0,  0.0,  1.0,  0.40 ]
+#    - [ 0.0,  0.0,   0.0, 1.0 ]
+optim_type: 2 # 1- LM, 2- isam2
+
+# 1684528359.30 - carter
+# 1689614040 - 17jul_outdoor1

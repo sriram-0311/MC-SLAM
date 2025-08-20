@@ -1,0 +1,42 @@
+%YAML:1.0
+cam0:
+  cam_overlaps: [1, 2]
+  camera_model: pinhole
+  distortion_coeffs: [-0.376399267634092, 0.2684942610034098, 0.001628309011323219, 0.0014062772667959773]
+  distortion_model: radtan
+  intrinsics: [1844.366980389411, 1844.3307292022498, 598.7232309792735, 485.860741542643]
+  resolution: [1224, 1024]
+  rostopic: /camera_array/cam0/image_raw
+cam1:
+  T_cn_cnm1:
+    - [0.9999794177984171, -0.0022684848272799744, -0.006001496157271278, -0.6623380208630613]
+    - [0.002250664414391626, 0.9999930436504492, -0.0029744176578341943, -0.005017592719902256]
+    - [0.006008201830092975, 0.0029608490839360922, 0.9999775671901193, 0.012803454621692334]
+    - [0.0, 0.0, 0.0, 1.0]
+  cam_overlaps: [0, 2]
+  camera_model: pinhole
+  distortion_coeffs: [-0.358772352699841, 0.25403084353949346, 0.0030358081220084295, -0.0007656982507203759]
+  distortion_model: radtan
+  intrinsics: [1827.6738715157737, 1827.6048759054268, 622.9891361245537, 492.407424212944]
+  resolution: [1224, 1024]
+  rostopic: /camera_array/cam2/image_raw
+
+imu:
+  rostopic: /imu/imu_uncompensated
+  #imu parameters       
+  acc_noise: 0.001119    # accelerometer measurement noise standard deviation. 
+  gyr_noise: 4.8e-05     # gyroscope measurement noise standard deviation.     
+  acc_walk: 0.000167     # accelerometer bias random walk noise standard deviation.  
+  gyr_walk: 3.0e-06     # gyroscope bias random walk noise standard deviation.     
+  g_norm: -9.8         # gravity magnitude
+
+  # T cam 0 to body frame
+  Tbc: 
+    - [-8.58363632e-04,  6.61255622e-03,  9.99977768e-01,  8.20198700e-02]
+    - [ 9.99994661e-01,  3.15863426e-03,  8.37491021e-04, -6.57655437e-01]
+    - [-3.15302608e-03,  9.99973148e-01, -6.61523217e-03,  1.62261224e-02]
+    - [0.,          0.,          0.,          1.        ]
+
+
+ 
+ 

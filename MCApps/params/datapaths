@@ -1,0 +1,27 @@
+ISEC_lab1 dataset
+/home/neural/datasets/ISEC_Lab1
+
+
+
+Curry 
+Commands:
+./LFSlamapp  --config_file /home/neural/neufr_ws/src/mcslam/LFApps/params/lf_slam_config.cfg --log_file /home/neural/multicamSLAM/results/curry/log_15.txt  --traj_file /home/neural/multicamSLAM/results/curry/traj_15.txt --v 0
+
+
+
+
+
+
+
+
+
+
+Calib files  
+/media/neural/pushyami_disk/March_14_2023/calibrations/multi_5_cam_calib-camchain_3cams_nov.yaml
+
+#/media/neural/pushyami_disk/oldneufr_data/04_21_2022_isec_curry/Curry_center/
+# /media/neural/pushyami_disk/oldneufr_data/04_21_2022_isec_curry/calib/calib_paper_results/camchain-04_21_2022_cams156_nov.yaml
+
+
+
+
