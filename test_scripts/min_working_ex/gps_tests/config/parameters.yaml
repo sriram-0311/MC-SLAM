@@ -1,0 +1,2 @@
+gps_datafile: /home/neural/catkin_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_tests/data/curve/sensor_data_curve_rot_5.txt
+output_file: /home/neural/catkin_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_tests/results/output_sensor_data_curve_rot_5.txt

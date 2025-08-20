@@ -1,0 +1,22 @@
+imu_data_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/carter_ground/carter_imu_data.txt #/home/neural/catkin_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/carter_ground/carter_imu_data.txt
+gps_data_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/carter_ground/carter_gps_data.txt
+imu_log_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/kri_imu_output_log.txt
+fusion_log_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/kri_fusion_log.txt
+E_T_V_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/gps_imu_fusion/data/E_T_V.txt
+image_data_file: /home/auv/tri_ws/ISEC_Lab1/KRI/cam0/ #/home/aryaman/catkin_ws/ISEC_Lab1/zedIMUTest4/cam0/
+g: 9.8
+accelerometer_sigma : 0.001119
+gyroscope_sigma : 0.000048
+integration_sigma : 0.000000
+accelerometer_bias_sigma : 0.000167
+gyroscope_bias_sigma : 0.001947
+imu_rest_time_max: 1684528359.30 #1709325133.64 #1709235419.01 #1684528359.30  #can be gotten from the rosbag
+Tbg:
+  - [0.9999999999999999, 0.0, 0.0, -0.2]
+  - [0.0, 0.9999999999999999, 0.0, 0.0]
+  - [0.0, 0.0, 0.9999999999999999, 0.4]
+  - [0.0, 0.0, 0.0, 1.0]
+optim_type: 2 # 1- LM, 2- isam2
+
+# 1684528359.30 - carter
+# 1689614040 - 17jul_outdoor1

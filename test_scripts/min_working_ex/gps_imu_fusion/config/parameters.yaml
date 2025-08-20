@@ -1,0 +1,10 @@
+imu_gps_datafile: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/data/12_jun_gps2/graph_logs.txt
+calib_file: /home/auv/tri_ws/src/TRI-SLAM/MCApps/params/zed_calib/calib_zed.yaml
+result_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/results/graph_logs_12_jun_gps_output.txt
+gps_data_gt_file: /home/auv/tri_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/results/graph_logs_12_jun_gps.txt
+
+
+#imu_gps_datafile: /home/neural/catkin_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/data/kri/graph_logs_kri_full.txt #/home/neural/catkin_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/data/12_jun_gps2/graph_logs.txt
+#calib_file: /home/neural/catkin_ws/src/TRI-SLAM/MCApps/params/nuance_calib/nuance.yaml #/home/neural/catkin_ws/src/TRI-SLAM/MCApps/params/zed_calib/calib_zed.yaml
+#result_file: /home/neural/catkin_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/results/graph_logs_kri_full.txt
+#gps_data_gt_file: /home/neural/catkin_ws/src/TRI-SLAM/test_scripts/min_working_ex/gps_imu_fusion/results/graph_logs_kri_gps.txt

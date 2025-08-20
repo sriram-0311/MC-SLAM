@@ -1,0 +1,7 @@
+betweenRotation: 1            # Got output when 1
+betweenTranslation: 1
+measurementNoise: 50
+pathInitialTraj: "/home/neural/BA_output.txt"
+pathLoopClosureTraj: "/home/neural/PGO_output.txt"
+useIMU: 0
+useGPS: 0

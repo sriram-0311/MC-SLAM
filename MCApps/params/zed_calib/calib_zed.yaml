@@ -1,0 +1,53 @@
+%YAML:1.0
+cam0:
+  cam_overlaps: [1]
+  camera_model: pinhole
+  distortion_coeffs: [0.0004809455371274426, 0.017539254842181093, -0.0023147852033182366, 0.001098765060765587]
+  distortion_model: radtan
+  intrinsics: [268.0886807833101, 266.2531972184412, 339.57968813983365, 175.06123592987922]
+  resolution: [640, 360]
+  rostopic: /zed2i/zed_node/left/image_rect_color
+  # /zed2i/zed_node/left_orig/image_rect_color
+  #/output/left/image_rect_color 
+  #/zed2i/zed_node/left/image_rect_color
+cam1:
+  T_cn_cnm1:
+    - [0.9999030819138741, 0.0010711343462142993, 0.013880902361026801, -0.1220026692068293]
+    - [-0.0011234892556085138, 0.9999922832259254, 0.003764473469264149, 0.00011691065038523982]
+    - [-0.013876762988410936, -0.003779703668360986, 0.99989656929562, 0.0023967307199285926]
+    - [0.0, 0.0, 0.0, 1.0]
+  cam_overlaps: [0]
+  camera_model: pinhole
+  distortion_coeffs: [0.021009365077816405, -0.002869918727108843, -0.002162006814444177, 0.0005957769428519366]
+  distortion_model: radtan
+  intrinsics: [268.89135202386177, 266.8960254737521, 335.2953727102823, 173.96166934284088]
+  resolution: [640, 360]
+  rostopic: /zed2i/zed_node/right/image_rect_color
+  # /zed2i/zed_node/right_orig/image_rect_color
+  #/output/right/image_rect_color 
+  # /zed2i/zed_node/right/image_rect_color
+
+imu:
+  rostopic: /zed2i/zed_node/imu/data
+  #imu parameters
+  acc_noise: 0.0015999999595806003    # accelerometer measurement noise standard deviation.
+  gyr_noise: 0.007000000216066837     # gyroscope measurement noise standard deviation.
+  acc_walk: 0.0002508999896235764     # accelerometer bias random walk noise standard deviation.
+  gyr_walk: 0.0019474000437185168     # gyroscope bias random walk noise standard deviation.
+  g_norm: 9.8         # gravity magnitude
+
+  # T cam 0 to body frame
+  Tbc:
+    - [0.0051989,  -0.00475195,  0.99997519,  0.01782353]
+    - [-0.99998009, -0.00360067,  0.00518181,  0.02405353]
+    - [0.00357595, -0.99998223, -0.00477058,  0.00652621]
+    - [0.,          0.,          0.,          1.        ]
+  
+gps:
+  rostopic: /gps
+
+  Tbg:
+    - [0.9999999999999999, 0.0, 0.0, -0.25]
+    - [0.0, 0.9999999999999999, 0.0, 0.0]
+    - [0.0, 0.0, 0.9999999999999999, 0.6]
+    - [0.0, 0.0, 0.0, 1.0]
