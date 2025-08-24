@@ -39,3 +39,79 @@
 
 # debug information files
 *.dwo
+
+# Build directories
+build/
+bin/
+lib/
+out/
+install/
+
+# IDE and editor files
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Visual Studio specific
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.aps
+*.vspscc
+*.vssscc
+*_i.c
+*_p.c
+*.ncb
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.sbr
+*.idb
+*.res
+*.tlog
+*.lastbuildstate
+*.iobj
+*.ipdb
+
+# Windows specific
+*.db
+*.sqlite
+CppProperties.json
+CMakeSettings.json
+
+# Temporary files
+*.tmp
+*.temp
+
+# Package files
+*.tar.gz
+*.zip
+*.rar
+
+# Data files (usually large)
+*.bag
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# ROS specific
+devel/
+logs/
