@@ -18,6 +18,7 @@ if(WIN32)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     add_compile_definitions(_SCL_SECURE_NO_WARNINGS)
     add_compile_definitions(NOMINMAX)
+    add_compile_definitions(WIN32_LEAN_AND_MEAN)
     
     # Set warning level
     add_compile_options(/W3)
@@ -25,8 +26,11 @@ if(WIN32)
     # Optimization flags
     add_compile_options($<$<CONFIG:Release>:/O2>)
     add_compile_options($<$<CONFIG:Debug>:/Od>)
+    
+    # Suppress specific MSVC warnings
+    add_compile_options(/wd4267 /wd4244 /wd4305 /wd4996)
 else()
-    # Linux/GCC specific settings (keeping original flags for cross-platform compatibility)
+    # Linux/GCC specific settings
     add_compile_options(-Wall -O2)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
@@ -39,8 +43,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Add custom cmake modules path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
-
-# Create a cmake/modules directory for custom find modules if it doesn't exist
 file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 #############################################
@@ -53,54 +55,78 @@ find_package(Threads REQUIRED)
 # Eigen3
 find_package(Eigen3 REQUIRED)
 if(NOT TARGET Eigen3::Eigen)
-    # Fallback for older Eigen versions
     add_library(Eigen3::Eigen INTERFACE IMPORTED)
     set_target_properties(Eigen3::Eigen PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${EIGEN3_INCLUDE_DIR}")
 endif()
 
-# OpenCV
-find_package(OpenCV REQUIRED)
-if(OpenCV_FOUND)
-    message(STATUS "OpenCV found: ${OpenCV_VERSION}")
-    message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
+# OpenCV (Required)
+if(WIN32)
+    # Windows-specific OpenCV handling
+    find_package(OpenCV CONFIG REQUIRED)
+    if(OpenCV_FOUND)
+        message(STATUS "OpenCV found via CONFIG: ${OpenCV_VERSION}")
+        message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
+        message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+    else()
+        message(FATAL_ERROR "OpenCV not found! Please install OpenCV via vcpkg: vcpkg install opencv4:x64-windows")
+    endif()
 else()
-    message(FATAL_ERROR "OpenCV not found!")
+    # Linux OpenCV handling
+    find_package(OpenCV REQUIRED)
+    if(OpenCV_FOUND)
+        message(STATUS "OpenCV found: ${OpenCV_VERSION}")
+        message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR "OpenCV not found!")
+    endif()
 endif()
 
-# Boost
+# Boost (Required)
 find_package(Boost REQUIRED COMPONENTS 
     program_options 
     filesystem 
     system 
     serialization 
     chrono
-    json
 )
+if(Boost_VERSION VERSION_GREATER_EQUAL "1.70.0")
+    find_package(Boost QUIET COMPONENTS json)
+    if(TARGET Boost::json)
+        set(BOOST_JSON_FOUND TRUE)
+    endif()
+endif()
 
-# Python (optional, but required for some functionality)
+# glog and gflags (Windows compatible)
+if(WIN32)
+    find_package(glog CONFIG QUIET)
+    find_package(gflags CONFIG QUIET)
+else()
+    find_package(glog QUIET)
+    find_package(gflags QUIET)
+endif()
+
+# Optional packages with graceful degradation
+set(OPTIONAL_PACKAGES "")
+
+# Python (optional)
 find_package(Python3 COMPONENTS Interpreter Development QUIET)
 if(Python3_FOUND)
     message(STATUS "Python3 found: ${Python3_VERSION}")
-    set(PYTHON_FOUND TRUE)
-    set(PYTHON_LIBRARIES ${Python3_LIBRARIES})
-    set(PYTHON_INCLUDE_DIRS ${Python3_INCLUDE_DIRS})
+    list(APPEND OPTIONAL_PACKAGES "Python3")
 else()
     message(WARNING "Python3 not found - some functionality may be limited")
-    set(PYTHON_FOUND FALSE)
 endif()
 
-# GTSAM
+# GTSAM (optional)
 find_package(GTSAM QUIET)
 if(GTSAM_FOUND)
     message(STATUS "GTSAM found")
     find_package(GTSAMCMakeTools QUIET)
+    list(APPEND OPTIONAL_PACKAGES "GTSAM")
 else()
-    message(WARNING "GTSAM not found - some functionality may be limited")
+    message(WARNING "GTSAM not found - advanced SLAM features will be disabled")
 endif()
-
-# Optional packages (with graceful degradation)
-set(OPTIONAL_PACKAGES "")
 
 # DBoW2 (optional)
 find_package(DBoW2 QUIET)
@@ -126,7 +152,7 @@ if(Pangolin_FOUND)
     message(STATUS "Pangolin found")
     list(APPEND OPTIONAL_PACKAGES "Pangolin")
 else()
-    message(WARNING "Pangolin not found - visualization will be disabled")
+    message(WARNING "Pangolin not found - 3D visualization will be disabled")
 endif()
 
 # GeographicLib (optional)
@@ -145,16 +171,16 @@ if(TIFF_FOUND)
     list(APPEND OPTIONAL_PACKAGES "TIFF")
 endif()
 
-# glog and gflags
-find_package(glog QUIET)
-find_package(gflags QUIET)
+#############################################
+# ROS COMPATIBILITY OPTIONS
+#############################################
 
-if(NOT glog_FOUND)
-    message(WARNING "glog not found - using minimal logging")
-endif()
+option(BUILD_WITH_ROS "Build with ROS support (Linux only)" OFF)
+option(BUILD_WINDOWS_NATIVE "Build Windows native version without ROS" ON)
 
-if(NOT gflags_FOUND)
-    message(WARNING "gflags not found - command line parsing may be limited")
+if(WIN32)
+    set(BUILD_WITH_ROS OFF CACHE BOOL "ROS not supported on Windows" FORCE)
+    set(BUILD_WINDOWS_NATIVE ON CACHE BOOL "Windows native build" FORCE)
 endif()
 
 #############################################
@@ -180,10 +206,16 @@ target_link_libraries(MCSlam_Dependencies INTERFACE
     Threads::Threads
 )
 
+# Add compile definitions
+target_compile_definitions(MCSlam_Dependencies INTERFACE
+    MCSLAM_WINDOWS_NATIVE=$<BOOL:${BUILD_WINDOWS_NATIVE}>
+    MCSLAM_WITH_ROS=$<BOOL:${BUILD_WITH_ROS}>
+)
+
 # Add optional dependencies
-if(PYTHON_FOUND)
-    target_include_directories(MCSlam_Dependencies INTERFACE ${PYTHON_INCLUDE_DIRS})
-    target_link_libraries(MCSlam_Dependencies INTERFACE ${PYTHON_LIBRARIES})
+if(Python3_FOUND)
+    target_include_directories(MCSlam_Dependencies INTERFACE ${Python3_INCLUDE_DIRS})
+    target_link_libraries(MCSlam_Dependencies INTERFACE ${Python3_LIBRARIES})
     target_compile_definitions(MCSlam_Dependencies INTERFACE MCSLAM_PYTHON_SUPPORT)
 endif()
 
@@ -218,18 +250,31 @@ if(GeographicLib_FOUND)
 endif()
 
 if(glog_FOUND)
-    target_link_libraries(MCSlam_Dependencies INTERFACE glog::glog)
+    if(WIN32)
+        target_link_libraries(MCSlam_Dependencies INTERFACE glog::glog)
+    else()
+        target_link_libraries(MCSlam_Dependencies INTERFACE glog::glog)
+    endif()
     target_compile_definitions(MCSlam_Dependencies INTERFACE MCSLAM_GLOG_SUPPORT)
 endif()
 
 if(gflags_FOUND)
-    target_link_libraries(MCSlam_Dependencies INTERFACE gflags)
+    if(WIN32)
+        target_link_libraries(MCSlam_Dependencies INTERFACE gflags::gflags)
+    else()
+        target_link_libraries(MCSlam_Dependencies INTERFACE gflags)
+    endif()
     target_compile_definitions(MCSlam_Dependencies INTERFACE MCSLAM_GFLAGS_SUPPORT)
 endif()
 
 if(TIFF_FOUND)
     target_link_libraries(MCSlam_Dependencies INTERFACE ${TIFF_LIBRARIES})
     target_compile_definitions(MCSlam_Dependencies INTERFACE MCSLAM_TIFF_SUPPORT)
+endif()
+
+if(BOOST_JSON_FOUND)
+    target_link_libraries(MCSlam_Dependencies INTERFACE Boost::json)
+    target_compile_definitions(MCSlam_Dependencies INTERFACE MCSLAM_BOOST_JSON_SUPPORT)
 endif()
 
 #############################################
@@ -242,10 +287,12 @@ add_subdirectory(MCDataUtils)
 add_subdirectory(MCSlam)
 add_subdirectory(MCApps)
 
-# Optional test modules (can be disabled)
+# Optional test modules
 option(BUILD_TESTS "Build test modules" ON)
 if(BUILD_TESTS)
-    add_subdirectory(test_imu_modules)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/test_imu_modules/CMakeLists.txt")
+        add_subdirectory(test_imu_modules)
+    endif()
 endif()
 
 # Test scripts (optional)
@@ -273,7 +320,10 @@ message(STATUS "=== MC-SLAM Build Configuration Summary ===")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "OpenCV Version: ${OpenCV_VERSION}")
+message(STATUS "Windows Native Build: ${BUILD_WINDOWS_NATIVE}")
+message(STATUS "ROS Support: ${BUILD_WITH_ROS}")
 if(GTSAM_FOUND)
     message(STATUS "GTSAM: Found")
 else()
