@@ -12,27 +12,27 @@
 
 ---
 
-## ?? Key Features
+## Key Features
 
-### **Advanced Multi-Camera Processing**
+### Advanced Multi-Camera Processing
 - **Multi-view stereo triangulation** with robust outlier rejection
 - **Intra-camera feature matching** across overlapping and non-overlapping camera configurations
 - **Adaptive keyframe selection** based on parallax and feature tracking quality
 - **Camera rig calibration** support with geometric constraints
 
-### **State-of-the-Art SLAM Pipeline**
+### State-of-the-Art SLAM Pipeline
 - **Visual-Inertial Odometry** with IMU pre-integration using GTSAM
 - **Loop closure detection** with DBoW2 vocabulary and geometric verification  
 - **GPS-assisted localization** with Umeyama alignment for global positioning
 - **Bundle adjustment** optimization for accurate trajectory estimation
 
-### **Robust Feature Processing**
+### Robust Feature Processing
 - **ORB feature extraction** with multi-scale pyramid processing
 - **Semantic segmentation** integration to filter dynamic objects
 - **Bag-of-Words** visual place recognition for loop closure
 - **Relocalization** capabilities for tracking recovery
 
-### **Sensor Fusion & Integration**
+### Sensor Fusion & Integration
 - **IMU integration** with bias estimation and gravity alignment
 - **GPS/GNSS support** with ENU coordinate transformation
 - **Multi-sensor synchronization** for accurate data association
@@ -40,7 +40,7 @@
 
 ---
 
-## ?? Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -54,7 +54,7 @@
 
 ### Installation
 
-#### **Linux (Ubuntu 20.04+)**
+#### Linux (Ubuntu 20.04+)
 ```bash
 # Clone the repository
 git clone https://github.com/sriram-0311/MC-SLAM.git
@@ -71,7 +71,7 @@ cmake ..
 make -j$(nproc)
 ```
 
-#### **Windows (Visual Studio 2019+)**
+#### Windows (Visual Studio 2019+)
 ```powershell
 # Using vcpkg for dependencies
 vcpkg install opencv4:x64-windows eigen3:x64-windows boost:x64-windows
@@ -86,15 +86,15 @@ cmake --build . --config Release
 
 ---
 
-## ?? Usage
+## Usage
 
-### **Basic SLAM Execution**
+### Basic SLAM Execution
 ```bash
 # Run the main SLAM application
 ./build/bin/MCSlamapp --config_file params/config_indoor.cfg
 ```
 
-### **Configuration**
+### Configuration
 
 Edit the configuration file to specify your setup:
 
@@ -114,14 +114,14 @@ semantic_segmentation: true
 real_time_processing: true
 ```
 
-### **Supported Data Formats**
+### Supported Data Formats
 - **ROS Bags** with synchronized multi-camera streams
 - **Image sequences** with timestamp synchronization
 - **Live camera feeds** through ROS integration
 
 ---
 
-## ??? System Architecture
+## System Architecture
 
 ```mermaid
 graph TB
@@ -141,7 +141,7 @@ graph TB
     L[Semantic Masks] --> B
 ```
 
-### **Core Components**
+### Core Components
 
 | Module | Responsibility |
 |--------|---------------|
@@ -153,21 +153,21 @@ graph TB
 
 ---
 
-## ?? Performance
+## Performance
 
-### **Accuracy**
+### Accuracy
 - **Translation Error**: < 1% of trajectory length on standard datasets
 - **Rotation Error**: < 0.01 rad/m on indoor sequences  
 - **Loop Closure**: > 95% precision with < 0.1% false positives
 
-### **Efficiency**
+### Efficiency
 - **Real-time processing** at 10+ Hz on modern hardware
 - **Memory efficient** landmark management with adaptive culling
 - **Scalable** to 5+ camera configurations
 
 ---
 
-## ?? Contributing
+## Contributing
 
 We welcome contributions! Here's how you can help:
 
@@ -177,7 +177,7 @@ We welcome contributions! Here's how you can help:
 4. **Push** to the branch (`git push origin feature/AmazingFeature`)
 5. **Open** a Pull Request
 
-### **Development Guidelines**
+### Development Guidelines
 - Follow C++17 standard
 - Add unit tests for new features
 - Update documentation for API changes
@@ -185,7 +185,7 @@ We welcome contributions! Here's how you can help:
 
 ---
 
-## ?? Documentation
+## Documentation
 
 - **[Windows Build Guide](WINDOWS_BUILD.md)** - Detailed Windows setup instructions
 - **[Data Collection](Datacollection.md)** - Instructions for dataset creation
@@ -194,7 +194,7 @@ We welcome contributions! Here's how you can help:
 
 ---
 
-## ?? Citation
+## Citation
 
 If you use MC-SLAM in your research, please cite:
 
@@ -209,20 +209,20 @@ If you use MC-SLAM in your research, please cite:
 
 ---
 
-## ?? Support
+## Support
 
 - **Issues**: [GitHub Issues](https://github.com/sriram-0311/MC-SLAM/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/sriram-0311/MC-SLAM/discussions)
 
 ---
 
-## ?? License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## ?? Acknowledgments
+## Acknowledgments
 
 - **ORB-SLAM** team for foundational SLAM concepts
 - **GTSAM** library for factor graph optimization
