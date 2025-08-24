@@ -1,6 +1,7 @@
-cmake_minimum_required (VERSION 3.0.0)
+cmake_minimum_required (VERSION 3.15)
 
-project(MCApps)
+project(MCApps VERSION 1.0.0 LANGUAGES CXX)
+
 ## Compile as C++11, supported in ROS Kinetic and newer
 #add_compile_options(-std=c++17)
 #add_compile_options(-fsanitize=leak)
@@ -73,37 +74,87 @@ project(MCApps)
 
 
 #catkin
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  rospy rosbag message_filters
-  std_msgs
-  cv_bridge
-  image_transport
-  sensor_msgs
-  common_utils
-  MCDataUtils
-  MCSlam
+# find_package(catkin REQUIRED COMPONENTS
+#   roscpp
+#   rospy rosbag message_filters
+#   std_msgs
+#   cv_bridge
+#   image_transport
+#   sensor_msgs
+#   common_utils
+#   MCDataUtils
+#   MCSlam
+# )
+
+# catkin_package(
+#   INCLUDE_DIRS include
+#   LIBRARIES ${PROJECT_NAME}
+#   CATKIN_DEPENDS roscpp rospy std_msgs common_utils MCDataUtils MCSlam
+#   DEPENDS OpenCV
+# )
+
+# include_directories(include)
+# include_directories( ${catkin_INCLUDE_DIRS} )
+
+# FILE(GLOB ${PROJECT_NAME}_SRC src/ParseSettings.cpp src/LiveViewer.cpp)
+
+add_library(MCSlam_Dependencies INTERFACE)
+
+# Create the main SLAM application executable
+add_executable(MCSlamapp  
+    src/mc_slam_app.cpp 
+    ${${PROJECT_NAME}_SRC}
 )
 
-catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS roscpp rospy std_msgs common_utils MCDataUtils MCSlam
-  DEPENDS OpenCV
+# Link dependencies
+target_link_libraries(MCSlamapp 
+    PRIVATE
+        MCSlam_Dependencies
+        common_utils
+        MCDataUtils
+        MCSlam
 )
 
-include_directories(include)
-include_directories( ${catkin_INCLUDE_DIRS} )
+# Set include directories for this target
+target_include_directories(MCSlamapp
+    PRIVATE 
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 
-FILE(GLOB ${PROJECT_NAME}_SRC src/ParseSettings.cpp src/LiveViewer.cpp)
+# Installation rules for the executable
+install(TARGETS MCSlamapp
+    RUNTIME DESTINATION bin
+)
 
-add_executable (MCSlamapp  src/mc_slam_app.cpp ${${PROJECT_NAME}_SRC})
-add_dependencies(MCSlamapp  ${catkin_EXPORTED_TARGETS})
-target_link_libraries(MCSlamapp  ${LIBS} ${catkin_LIBRARIES} )
+# Optional: Create a MonoSlamApp if the source exists
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/MonoSlamApp.cpp")
+    add_executable(MonoSlamApp  
+        src/MonoSlamApp.cpp 
+        ${${PROJECT_NAME}_SRC}
+    )
+    
+    target_link_libraries(MonoSlamApp 
+        PRIVATE
+            MCSlam_Dependencies
+            common_utils
+            MCDataUtils
+            MCSlam
+    )
+    
+    target_include_directories(MonoSlamApp
+        PRIVATE 
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    )
+    
+    install(TARGETS MonoSlamApp
+        RUNTIME DESTINATION bin
+    )
+endif()
 
-
-# add_executable (MonoSlamApp  src/MonoSlamApp.cpp ${${PROJECT_NAME}_SRC})
-# add_dependencies(MonoSlamApp  ${catkin_EXPORTED_TARGETS})
-# target_link_libraries(MonoSlamApp  ${LIBS} ${catkin_LIBRARIES} )
-        
+# Copy parameter files to build directory for easier testing
+file(GLOB PARAM_FILES "params/*")
+if(PARAM_FILES)
+    file(COPY ${PARAM_FILES} 
+         DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/params)
+endif()
 
