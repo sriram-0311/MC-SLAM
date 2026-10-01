@@ -115,3 +115,22 @@ Thumbs.db
 # ROS specific
 devel/
 logs/
+
+# --- Data dumps, logs, IDE and build artifacts ---
+data/**/*.txt
+**/data/*.txt
+results/
+**/results/
+*.log
+graph_logs*.txt
+.idea/
+.vscode/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+build/
+devel/
+install/
+*.bag
+*.mcap
+*.db3
