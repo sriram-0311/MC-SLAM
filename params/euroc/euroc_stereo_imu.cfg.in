@@ -1,0 +1,27 @@
+# MC-SLAM run configuration for EuRoC MAV (stereo + IMU).
+# Rendered by scripts/run_euroc.sh: @SEQ_DIR@, @OUT_DIR@, @PARAMS_DIR@ are substituted.
+dataset_type=euroc
+data_path=@SEQ_DIR@
+calib_file_path=@PARAMS_DIR@/calib_euroc.yaml
+kalibr=1
+radtan=1
+
+frontend_params_file=@OUT_DIR@/frontend.yaml
+backend_params_file=@PARAMS_DIR@/backend.yaml
+
+imu=1
+gps=0
+relocalization=0
+debug_mode=0
+
+# Unused by the EuRoC reader but validated by the settings parser.
+segmasks_path=@OUT_DIR@
+seg_settings_file=@PARAMS_DIR@/backend.yaml
+use_segment=0
+read_segmask=0
+
+# Session outputs (map/database/graph logs, reusable for relocalization runs).
+DataBase=@OUT_DIR@/orb_database.bin
+MapLogs=@OUT_DIR@/map_logs.txt
+GraphLogs=@OUT_DIR@/graph_logs.txt
+graph_logs=@OUT_DIR@/graph_logs.txt

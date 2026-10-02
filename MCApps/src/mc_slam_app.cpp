@@ -15,6 +15,8 @@
 
 
 #include "MCDataUtils/DatasetReader.h"
+#include "MCDataUtils/EurocReader.h"
+#include "FrameTiming.h"
 
 #include <chrono>
 //// OPENGV ////
@@ -36,12 +38,21 @@ void process_frames(FrontEnd& frontend, Backend& backend);
 
 bool updateData(FrontEnd& frontend,  DatasetReaderBase &dataReader);
 
+void runHeadless(FrontEnd& frontend, Backend& backend, DatasetReaderBase& dataReader, const std::string& timingFile);
+
+void writeBodyTrajectory(const FrontEnd& frontend, const std::string& filename);
+
 DEFINE_bool(fhelp, false, "show config file options");
 
 DEFINE_string(config_file, "", "config file path");
 
 DEFINE_string(log_file, "pose_stats.txt", "log_file file path");
 DEFINE_string(traj_file, "Tum_trajectory.txt", "trajectory file file path");
+DEFINE_string(body_traj_file, "", "if set, also write keyframe poses of the body (IMU) frame in TUM format");
+DEFINE_string(timing_file, "", "if set, write per-frame stage timings (CSV)");
+DEFINE_bool(headless, false, "run without the Pangolin viewer / keyboard loop (for benchmarks)");
+
+mcslam::FrameTiming g_timing;
 
 using namespace cv;
 using namespace std;
@@ -68,8 +79,13 @@ int main(int argc , char** argv){
 
     //Initialize get the data from ros bag using ros reader
     //read the dataset and calibration given settings for the refocus object
-    // TODO(port): replace with a dataset-specific reader (EuRoC) selected from settings.
-    DatasetReaderBase* datareader = new DatasetReader();
+    DatasetReaderBase* datareader = nullptr;
+    if (settings.dataset_type == "euroc")
+        datareader = new mcslam::EurocReader();
+    else if (settings.dataset_type == "images")
+        datareader = new DatasetReader();
+    else
+        LOG(FATAL) << "Unknown dataset_type '" << settings.dataset_type << "' (expected euroc or images)";
     datareader->initialize(settings);
 
 
@@ -91,6 +107,9 @@ int main(int argc , char** argv){
    slam_backend = new Backend(settings.backend_params_file, *cam_cfg, slam_frontend);
     VLOG(0) << "slam_backend initialized" <<endl;
    // create a openGlViewer object
+   if (FLAGS_headless) {
+       runHeadless(*slam_frontend, *slam_backend, *datareader, FLAGS_timing_file);
+   } else {
    OpenGlViewer* glViewer;
    glViewer = new OpenGlViewer(settings.frontend_params_file, slam_frontend);
    if (!settings.relocalization)
@@ -107,6 +126,7 @@ int main(int argc , char** argv){
    // user can give keyboard inputs to control the loop for obtaining next image,
    // visualizing and exiting
    handleKeyboardInput(*slam_frontend, *slam_backend,  *datareader, *glViewer);
+   }
    //    slam_frontend->writeLogs(FLAGS_log_file);
    slam_frontend->logFile_.close();
    slam_frontend->logFile2_.close();
@@ -120,6 +140,8 @@ int main(int argc , char** argv){
 
 //   slam_frontend->saveORBDatabase();
    slam_frontend->writeTrajectoryToFile(FLAGS_traj_file, false);
+   if (!FLAGS_body_traj_file.empty())
+       writeBodyTrajectory(*slam_frontend, FLAGS_body_traj_file);
    // If not in relocalization mode. then save.
    if(!slam_frontend->relocal)
    {
@@ -537,6 +559,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
     auto stopT = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stopT - startT);
     feat_xtract_time += duration.count();
+    g_timing.extract_us = mcslam::usBetween(startT, stopT);
 
     VLOG(1)<<"Total time taken for Computing the intramatch features: "<<duration.count()<<" | Average: " <<(feat_xtract_time/frame_counter)<<endl;
 
@@ -549,6 +572,8 @@ void process_frames(FrontEnd& frontend, Backend& backend){
     auto stopF = high_resolution_clock::now();
     duration = duration_cast<milliseconds>(stopT - startT);
     tracking_time += duration.count();
+    g_timing.track_us = mcslam::usBetween(startT, stopT);
+    g_timing.keyframe = new_kf;
     VLOG(1)<<"Total time taken for tracking MC Frame: "<<duration.count()<<" | Average: " << (tracking_time/frame_counter)<< endl;
     VLOG(1)<<"Total time taken for Frontend: "<<duration_cast<milliseconds>(stopF - startF).count()<<" | Average: " << (duration_cast<milliseconds>(stopF - startF).count()/frame_counter)<< endl;
 
@@ -618,6 +643,8 @@ void process_frames(FrontEnd& frontend, Backend& backend){
             optimtize_ = backend.SmartFactor_backend(loop_closed);
 //            optimtize_ = backend.addKeyFrameMulti();
             auto stopT1 = high_resolution_clock::now();
+            g_timing.graph_us = mcslam::usBetween(startT1, stopT1);
+            g_timing.loop_closure = loop_closed;
             auto duration1 = duration_cast<milliseconds>(stopT1 - startT1);
             VLOG(0)<<"Total time taken for Back-end optimization: "<<duration1.count()<<endl;
 //            optimtize_ = false;
@@ -630,6 +657,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
                 auto startT2 = high_resolution_clock::now();
                 bool update = backend.optimizePosesLandmarks();
                 auto stopT2 = high_resolution_clock::now();
+                g_timing.optimize_us = mcslam::usBetween(startT2, stopT2);
                 auto duration2 = duration_cast<milliseconds>(stopT2 - startT2);
                 VLOG(0)<<"Total time taken for Back-end optimization: "<<duration2.count()<<endl;
                 if(update) {
@@ -637,6 +665,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
                     auto  startT3 = high_resolution_clock::now();
                     backend.UpdateVariables_SmartFactors();
                     auto stopT3 = high_resolution_clock::now();
+                    g_timing.update_us = mcslam::usBetween(startT3, stopT3);
                     auto duration3 = duration_cast<milliseconds>(stopT3 - startT3);
                     VLOG(0)<<"Total time taken for updating the variables: "<<duration3.count()<<endl;
                 }
@@ -763,3 +792,45 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
    }
 }
 
+/// Benchmark loop: no viewer, no keyboard handling; one CSV row of stage timings per frame.
+void runHeadless(FrontEnd& frontend, Backend& backend, DatasetReaderBase& dataReader, const std::string& timingFile) {
+    std::ofstream timing;
+    if (!timingFile.empty()) {
+        timing.open(timingFile);
+        CHECK(timing) << "cannot open " << timingFile;
+        timing << mcslam::FrameTiming::csvHeader() << "\n";
+    }
+    size_t frames = 0;
+    const auto t0 = high_resolution_clock::now();
+    while (true) {
+        g_timing = mcslam::FrameTiming{};
+        const auto start = high_resolution_clock::now();
+        if (!updateData(frontend, dataReader)) break;
+        const auto loaded = high_resolution_clock::now();
+        g_timing.timestamp = frontend.currentFrame->timeStamp;
+        g_timing.read_us = mcslam::usBetween(start, loaded);
+        process_frames(frontend, backend);
+        g_timing.total_us = mcslam::usBetween(start, high_resolution_clock::now());
+        if (timing) timing << g_timing.csvRow() << "\n";
+        ++frames;
+    }
+    const double secs = mcslam::usBetween(t0, high_resolution_clock::now()) * 1e-6;
+    LOG(INFO) << "Processed " << frames << " frames in " << secs << " s (" << frames / secs << " FPS)";
+}
+
+/// Keyframe trajectory of the body (IMU) frame: T_wb = T_wc * T_bc^-1 (TUM: t x y z qx qy qz qw).
+void writeBodyTrajectory(const FrontEnd& frontend, const std::string& filename) {
+    std::ofstream f(filename);
+    CHECK(f) << "cannot open " << filename;
+    const cv::Mat T_cb = frontend.Tbc_cv.inv();
+    for (size_t i = 0; i < frontend.allPoses.size(); ++i) {
+        cv::Mat T_wc = cv::Mat::eye(4, 4, CV_64F);
+        frontend.allPoses[i].copyTo(T_wc.rowRange(0, 3));
+        const cv::Mat T_wb = T_wc * T_cb;
+        const std::vector<float> q = RotMatToQuat(T_wb(cv::Rect(0, 0, 3, 3)));
+        f << std::fixed << std::setprecision(9) << frontend.poseTimeStamps.at(i) << " "
+          << T_wb.at<double>(0, 3) << " " << T_wb.at<double>(1, 3) << " " << T_wb.at<double>(2, 3) << " "
+          << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << "\n";
+    }
+    LOG(INFO) << "Wrote " << frontend.allPoses.size() << " body-frame keyframe poses to " << filename;
+}

@@ -138,3 +138,4 @@ install/
 # Local build config and outputs
 CMakeUserPresets.json
 build/
+results/

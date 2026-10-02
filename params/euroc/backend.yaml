@@ -1,0 +1,18 @@
+%YAML:1.0
+# Back-end parameters for EuRoC MAV.
+
+# Reference camera of the rig
+CamID: 0
+
+# Pixel noise of a keypoint measurement (Huber-robustified)
+MeasurementNoiseSigma: 1.0
+
+# 0: iSAM2 (incremental), 1: Levenberg-Marquardt (batch)
+Optimization: 0
+ISAMRelinearizeThreshold: 0.1
+ISAMRelinearizeSkip: 1
+
+# Optimize every N keyframes
+WindowBad: 1
+# Minimum triangulation angle between rays [deg] for a landmark to enter the graph
+AngleThresh: 1.0

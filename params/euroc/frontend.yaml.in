@@ -1,0 +1,37 @@
+%YAML:1.0
+# Front-end parameters for EuRoC MAV (752x480 @ 20 Hz, global-shutter stereo).
+# @VOCAB_DIR@ and @OUT_DIR@ are substituted by scripts/run_euroc.sh.
+
+Vocabulary: "@VOCAB_DIR@/ORBvoc.txt"
+FBOWVocabulary: "@VOCAB_DIR@/orb_mur.fbow"
+LogDir: "@OUT_DIR@/logs"
+
+Camera.width: 752
+Camera.height: 480
+Camera.fps: 20
+
+# ORB extraction per camera
+ORBextractor.nFeatures: 1200
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+# 0: MIN_FEATS, 1: RANSAC_FILTER
+InitCondition: 1
+# 0: PC_ALIGN, 1: SEVENTEEN_PT, 2: G_P3P (generalized P3P over the rig)
+PoseEstimation: 2
+# 0: brute force, 1: bag-of-words
+InterMatch: 1
+
+# Keyframe insertion: baseline [m] or rotation [rad] since last keyframe
+KFBaselineThresholdTranslation: 0.15
+KFBaselineThresholdRotation: 0.15
+
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 2
+Viewer.PointSize: 2
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500

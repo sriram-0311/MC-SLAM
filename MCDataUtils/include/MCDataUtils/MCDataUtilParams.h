@@ -15,6 +15,7 @@ struct MCDataUtilSettings {
     int debug_mode; // 1 for debug mode
     // the root path of the dataset
     string data_path;
+    string dataset_type = "images";  // "images" or "euroc"
     string calib_file_path;
     string calib_images_path;
     string frontend_params_file;

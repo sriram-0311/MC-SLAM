@@ -12,6 +12,7 @@ void programOptions(po::variables_map& vm, const string& filename, bool h){
             ("debug_mode", po::value<int>()->default_value(0), "ON to use debug mode")
             ("eval_mode", po::value<int>()->default_value(0), "ON to use evaluation mode")
             ("datagen_mode",  po::value<int>()->default_value(0), "ON to write refocused and depth images to disk")
+            ("dataset_type", po::value<string>()->default_value("images"), "input format: images (legacy image folders) or euroc (EuRoC ASL)")
             ("data_path", po::value<string>()->default_value(""), "data path contaning imgs, segmasks, calibration file to use")
             ("calib_file_path", po::value<string>()->default_value("camchain.yaml"), "calibration file to use")
             ("calib_images_path", po::value<string>()->default_value(""), "calibration images path with respective cam folders")
@@ -105,6 +106,7 @@ void parseMCDataUtilParams(MCDataUtilSettings &settings, const po::variables_map
         LOG(FATAL)<<"data_path is a REQUIRED variable";
     }
     settings.data_path = dataP.string();
+    settings.dataset_type = vm["dataset_type"].as<string>();
 
     boost::filesystem::path calibP(vm["calib_file_path"].as<string>());
     if(calibP.string().empty()) {
