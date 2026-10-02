@@ -737,8 +737,8 @@ void DatasetReader::getNext(vector<cv::Mat>& imgs, vector<string>& segmaskImgs, 
     current_index++;
 }
 
-void DatasetReader::getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<sensor_msgs::Imu>& imu_msgs){}
+void DatasetReader::getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<mcslam::ImuSample>& imu_msgs){}
 
 
 
-void DatasetReader::getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<sensor_msgs::Imu>& imu_msgs, std::deque<sensor_msgs::NavSatFix>& gps_msgs){}
+void DatasetReader::getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<mcslam::ImuSample>& imu_msgs, std::deque<mcslam::GnssFix>& gps_msgs){}

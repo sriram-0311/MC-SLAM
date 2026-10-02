@@ -2,8 +2,7 @@
 // Created by Pushyami Kaveti on 6/29/20.
 //
 #include "MCSlam/MultiCameraFrame.h"
-#include <opencv2/sfm/projection.hpp>
-#include <opencv2/sfm/triangulation.hpp>
+#include "MCSlam/Triangulation.h"
 #include <FeatureVector.h>
 #include <cstdlib>
 using namespace std;
@@ -435,7 +434,7 @@ void MultiCameraFrame::triangulateIntraMatches(const Mat_<double> &x, vector<int
     Mat X_and_alphas;
     cv::SVD::solveZ(design, X_and_alphas);
     Vec3d X;
-    cv::sfm::homogeneousToEuclidean(X_and_alphas.rowRange(0, 4), X);
+    mcslam::geom::homogeneousToEuclidean(X_and_alphas.rowRange(0, 4), X);
     for(int j=0; j<3; ++j)
         pt[j] = X[j];
 }
@@ -868,7 +867,7 @@ void MultiCameraFrame::computeIntraMatches(vector<IntraMatch>& matches,vector<DB
 //
 //                            }
 //                            cv::Mat pt3d_sfm;
-//                            cv::sfm::triangulatePoints(xx, PJs, pt3d_sfm);
+//                            mcslam::geom::triangulatePoints(xx, PJs, pt3d_sfm);
 //                            if(pt3d_sfm.at<double>(2, 0) < 12 and pt3d_sfm.at<double>(2, 0) > 0.5 ){
 //                                intraMatchViews[matches[intraMatchInd].n_rays]++;
 //                                Mat projected = camconfig_.K_mats_[0] * pt3d_sfm;
@@ -1573,7 +1572,7 @@ void MultiCameraFrame::drawIntraMatches(){
         }
 
         cv::Mat pt3d_sfm;
-        cv::sfm::triangulatePoints(xx, PJs, pt3d_sfm);
+        mcslam::geom::triangulatePoints(xx, PJs, pt3d_sfm);
 
         Mat projected_sfm = camconfig_.K_mats_[0] * pt3d_sfm;
         double expected_x_sfm = projected_sfm.at<double>(0,0) / projected_sfm.at<double>(2,0);
@@ -1589,9 +1588,9 @@ void MultiCameraFrame::drawIntraMatches(){
             Mat Rt = build_Rt(camconfig_.R_mats_[indd], camconfig_.t_mats_[indd]);
             Mat P1 = camconfig_.K_mats_[indd] * Rt;
             Mat homo;
-            sfm::euclideanToHomogeneous(pt3d_sfm, homo);
+            mcslam::geom::euclideanToHomogeneous(pt3d_sfm, homo);
             Mat x_projected_sfm;
-            sfm::homogeneousToEuclidean(P1 * homo, x_projected_sfm) ;
+            mcslam::geom::homogeneousToEuclidean(P1 * homo, x_projected_sfm) ;
             cout<<indd<< "  : "<<x_projected_sfm.at<double>(0,0)<<","<<x_projected_sfm.at<double>(1,0)<<"||";
         }
         cout<<endl;
@@ -1740,18 +1739,5 @@ int MultiCameraFrame::countLandmarks (bool mono){
     return c;
 }
 
-/// Not Implemented
-void MultiCameraFrame::reconstruct3D(DepthReconstructor* depthProc, Mat imgL, Mat imgR){
-
-    cvtColor(imgL,imgL , COLOR_BGR2GRAY);
-    cvtColor(imgR,imgR , COLOR_BGR2GRAY);
-
-    Mat disp, vdisp;
-    depthProc->calcDisparity(imgL, imgR, disp, depthMap);
-
-    cv::normalize(disp, vdisp, 0, 256, cv::NORM_MINMAX, CV_8U);
-    cv::imshow("disparity", vdisp);
-    cv::waitKey(0);
-}
 
 

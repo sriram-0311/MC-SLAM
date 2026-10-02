@@ -29,8 +29,8 @@ public:
     void loadNext(vector<cv::Mat>& imgs);
     void getNext(vector<cv::Mat>& imgs, double& timeStamp);
     void getNext(vector<cv::Mat>& imgs, vector<string>& segmaskImgs, double& timeStamp);
-    void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<sensor_msgs::Imu>& imu_msgs);
-    void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<sensor_msgs::Imu>& imu_msgs, std::deque<sensor_msgs::NavSatFix>& gps_msgs);
+    void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<mcslam::ImuSample>& imu_msgs);
+    void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<mcslam::ImuSample>& imu_msgs, std::deque<mcslam::GnssFix>& gps_msgs);
 
     int MTIFF_FLAG;
     int MP4_FLAG;

@@ -12,7 +12,6 @@
 #include "common_utils/tools.h"
 #include "MCSlam/utils.h"
 //#include <opencv2/cudafeatures2d.hpp>
-#include <MCSlam/DepthReconstructor.h>
 
 // OPENGV ////
 #include <Eigen/Eigen>
@@ -90,8 +89,6 @@ class MultiCameraFrame {
                                    vector<vector<vector<Point2f>>>& kps_1,vector<vector<vector<Point2f>>>& kps_2);
 
         void computeRepresentativeDesc( vector<cv::Mat> descs, cv::Mat& desc_out );
-
-        void reconstruct3D(DepthReconstructor* depthProc, Mat imgL, Mat imgR);
 
         void triangulate(vector<Point2f>& kps_1, vector<Point2f>& kps_2, vector<Point3f>& pts3D , int cam1, int cam2);
         void testTriangulateIntraMatches();

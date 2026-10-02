@@ -46,7 +46,7 @@ void Tracking::inverse(cv::Mat& a_T_b, cv::Mat& b_T_a)
 void Tracking::createCameraRig(std::vector<gtsam::Matrix>& cameraParameters, std::vector<gtsam::Pose3>& R_T_mats,
                                gtsam::Pose3& b_T_c)
 {
-    multi_cam_rig = boost::make_shared<CameraSet<PinholePose<Cal3_S2>>>();
+    multi_cam_rig = std::make_shared<CameraSet<PinholePose<Cal3_S2>>>();
     // Assign the parameters and the extrinsics.
     int iter = 0;
     for(auto& cam : cameraParameters)

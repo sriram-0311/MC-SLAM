@@ -134,3 +134,7 @@ install/
 *.bag
 *.mcap
 *.db3
+
+# Local build config and outputs
+CMakeUserPresets.json
+build/

@@ -15,8 +15,8 @@
 #include "MCSlam/MultiCameraFrame.h"
 #include "MCSlam/GlobalMap.h"
 #include "MCSlam/utils.h"
-#include "DUtils/DUtils.h"
-#include "DVision/DVision.h"
+#include <DUtils/DUtils.h>
+#include <DVision/DVision.h>
 #include "TemplatedLoopDetector.h"
 #include "TemplatedVocabulary.h"
 #include "TemplatedDatabase.h"

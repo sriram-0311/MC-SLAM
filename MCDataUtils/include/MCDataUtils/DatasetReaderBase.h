@@ -14,9 +14,7 @@
 #include "CamArrayConfig.h"
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
-#include <ros/ros.h>
-#include "sensor_msgs/Imu.h"
-#include <sensor_msgs/NavSatFix.h>
+#include "MCDataUtils/SensorTypes.h"
 
 using namespace std;
 
@@ -29,8 +27,8 @@ public:
     virtual void loadNext(vector<cv::Mat>& imgs) = 0;
     virtual void getNext(vector<cv::Mat>& imgs, double& timeStamp) = 0;
     virtual void getNext(vector<cv::Mat>& imgs, vector<string>& segmaskImgs, double& timeStamp) = 0;
-    virtual void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<sensor_msgs::Imu>& imu_msgs) = 0;
-    virtual void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<sensor_msgs::Imu>& imu_msgs, std::deque<sensor_msgs::NavSatFix>& gps_msgs) = 0;
+    virtual void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<mcslam::ImuSample>& imu_msgs) = 0;
+    virtual void getNext(vector<cv::Mat>& imgs, double& timeStamp, std::deque<mcslam::ImuSample>& imu_msgs, std::deque<mcslam::GnssFix>& gps_msgs) = 0;
 
 
     vector<Mat> getKMats(){ return K_mats_ ; }

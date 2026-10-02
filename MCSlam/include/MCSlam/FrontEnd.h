@@ -9,15 +9,12 @@
 #include <boost/assign.hpp>
 #include <boost/assign/std/vector.hpp>
 #include <boost/filesystem.hpp>
-#include "sensor_msgs/Imu.h"
-#include "sensor_msgs/NavSatFix.h"
 #include "MCDataUtils/CamArrayConfig.h"
 #include "MCSlam/ORBVocabulary.h"
 #include "MCSlam/ORBextractor.h"
 #include "MCSlam/FrontEndBase.h"
 #include "MCSlam/GlobalMap.h"
 #include "common_utils/StringEnumerator.hpp"
-#include "common_utils/matplotlibcpp.h"
 #include "common_utils/utilities.h"
 #include "MCSlam/LoopCloser.h"
 #include "MCSlam/relocalization.h"
@@ -31,7 +28,6 @@
 #include <chrono>
 #include <Eigen/Eigen>
 #include <yaml-cpp/yaml.h>
-#include <ros/ros.h>
 #include <opengv/types.hpp>
 #include <gtsam/nonlinear/DoglegOptimizer.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
@@ -55,6 +51,7 @@
 #include <boost/assign.hpp>
 #include <boost/assign/std/vector.hpp>
 #include "MCSlam/newGPSFactor.h"
+#include "MCDataUtils/SensorTypes.h"
 #include <boost/json.hpp>
 
 /// OPENGV ///
@@ -247,8 +244,6 @@ public:
         EntryCount = 0;
 //        lcLF_ = new LoopCloser(orb_vocabulary);
 //        lcMono_ = new LoopCloser(orb_vocabulary);
-//        depthProc = new DepthReconstructor(1, camconfig_.iqm_size_, true, false);
-//        depthProc->init(camconfig_.K_mats_[0] , camconfig_.dist_coeffs_[0],  camconfig_.K_mats_[1] , camconfig_.dist_coeffs_[1],camconfig_.R_mats_[1], camconfig_.t_mats_[1]);
 
         convertCamConfig_CV2GTSAM(camconfig, RT_Mats);
         convertCamConfig_CV2GTSAM(camconfig, RT_Mats_init);
@@ -521,7 +516,6 @@ public:
 
     void writeTrajectoryToFile(const string &filename,  bool mono);
 
-    void featureStats();
 
     void drawInterMatch(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur, int prev_ind, int cur_ind);
     void prepareOpengvData(vector<Point2f>& kps_1, vector<Point2f>& kps_2, int cam1, int cam2);
@@ -596,7 +590,7 @@ public:
      * IMU message to be appended to the log file.
      * @param message
      */
-    void appendIMUValue(sensor_msgs::Imu *message);
+    void appendIMUValue(mcslam::ImuSample *message);
 
 
     bool startTrackingModule(gtsam::NavState state);
@@ -661,7 +655,6 @@ public:
     ORBDatabase* orb_database;
     GlobalMap* map;
     //MulticamElas* reconstructor;
-    DepthReconstructor* depthProc;
 
     // Loop Closure functionalities.
     LoopCloser* looper;
@@ -708,10 +701,10 @@ public:
     float g_norm;
     Eigen::Matrix4d Tbc = Eigen::Matrix4d::Identity();
     Eigen::Matrix4d Tbw;
-    Eigen::Quaterniond world_imu_frame(std::deque<sensor_msgs::Imu>& imu_messages);
+    Eigen::Quaterniond world_imu_frame(std::deque<mcslam::ImuSample>& imu_messages);
     Eigen::MatrixXd kabsch(Eigen::MatrixXd A, Eigen::MatrixXd B);
     void imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias);
-    void imu_initialize(std::deque<sensor_msgs::Imu> imu_msgs, double image_time);
+    void imu_initialize(std::deque<mcslam::ImuSample> imu_msgs, double image_time);
     void imu_values_removal(double image_time);
     void imu_preintegration(double image_time);
     bool imu_initialized = false;
@@ -721,10 +714,10 @@ public:
     gtsam::imuBias::ConstantBias prior_imu_bias;
     Eigen::Matrix3d world_imu_rotation = Eigen::Matrix3d::Zero();
     bool done_rotation_opt = false;
-    std::deque<sensor_msgs::Imu> imu_msgs_initialized;
+    std::deque<mcslam::ImuSample> imu_msgs_initialized;
     bool first_keyframe = true;
     double prev_image_time = 0;
-    std::deque<sensor_msgs::Imu> imu_msgs_combined;
+    std::deque<mcslam::ImuSample> imu_msgs_combined;
     gtsam::noiseModel::Diagonal::shared_ptr priorPoseNoise;
     gtsam::noiseModel::Diagonal::shared_ptr priorVelNoise;
     gtsam::noiseModel::Diagonal::shared_ptr bias_noise_model;
@@ -733,7 +726,7 @@ public:
     Eigen::Vector3d bias_gyr;
     gtsam::NavState lastState_;
     gtsam::imuBias::ConstantBias bias_prior, lastBias_;
-    boost::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params> params;
+    std::shared_ptr<gtsam::PreintegratedCombinedMeasurements::Params> params;
 
     void
     TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF,
@@ -752,16 +745,16 @@ public:
 
     // GPS related
 
-    std::deque<sensor_msgs::NavSatFix> gps_msgs_combined;
+    std::deque<mcslam::GnssFix> gps_msgs_combined;
     bool gps_initialized = false;
-    std::deque<sensor_msgs::NavSatFix> gps_msgs_initialize;
+    std::deque<mcslam::GnssFix> gps_msgs_initialize;
     std::deque<gtsam::Pose3> vins_poses_initialize;
-    void gps_initialize_kabsch(std::deque<sensor_msgs::NavSatFix>  gps_msgs_combined, MultiCameraFrame* prev_kf);
-    void gps_ENU_reference_params(sensor_msgs::NavSatFix gps_msg);
+    void gps_initialize_kabsch(std::deque<mcslam::GnssFix>  gps_msgs_combined, MultiCameraFrame* prev_kf);
+    void gps_ENU_reference_params(mcslam::GnssFix gps_msg);
     bool gps_init_data_Stored = false;
 
     bool useGPS = false;            // for now do it in a basic way
-    tuple<double, double, double> geodetic_to_enu(sensor_msgs::NavSatFix gps_msg);
+    tuple<double, double, double> geodetic_to_enu(mcslam::GnssFix gps_msg);
 
     double refLat = 42.3384;
     double refLon = -71.0855;
@@ -803,7 +796,7 @@ public:
 
     struct gps_umeyama_data
     {
-        sensor_msgs::NavSatFix  gps_msg;
+        mcslam::GnssFix  gps_msg;
         MultiCameraFrame* prev_keyframe;
         MultiCameraFrame* next_keyframe;
     };

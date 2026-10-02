@@ -1,74 +1,38 @@
-#include <gtsam/inference/Symbol.h>
+#pragma once
+
 #include <gtsam/geometry/Pose3.h>
-#include <gtsam/nonlinear/NonlinearFactor.h>
-#include <glog/logging.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/nonlinear/NoiseModelFactorN.h>
 
-using namespace std;
-using namespace gtsam;
-
-
-class newGPSFactor: public NoiseModelFactor2<Pose3, Pose3>{
-
-
-    Point3 gps_P_;
-    typedef NoiseModelFactor2<Pose3, Pose3> Base;
-
-
-    Pose3 body_P_sensor; // extrinsic as a pose - identity rotation  + extrinsic translation
-
+/**
+ * GPS position factor that also estimates the VIO-to-ENU alignment.
+ *
+ * Connects the body pose V_T_B (in the VIO frame) with the alignment transform
+ * E_T_V (VIO frame to local ENU frame). The measurement model is
+ *     h(V_T_B, E_T_V) = E_T_V * (V_T_B * B_t_G)
+ * where B_t_G is the GPS antenna lever arm in the body frame, and the error is
+ * h - gps_E (the GPS fix expressed in the local ENU frame).
+ */
+class newGPSFactor : public gtsam::NoiseModelFactorN<gtsam::Pose3, gtsam::Pose3> {
 public:
-    // constructor for the factor
-    newGPSFactor(Key gps_key, const Point3& gps_P_, Key transform_Key, const SharedNoiseModel& model, const Pose3& body_P_sensor) :
-            Base(model, gps_key, transform_Key), gps_P_(gps_P_), body_P_sensor(body_P_sensor) {
-    }
+    using Base = gtsam::NoiseModelFactorN<gtsam::Pose3, gtsam::Pose3>;
+    using Base::evaluateError;
 
-    ~newGPSFactor() override{}
+    newGPSFactor(gtsam::Key pose_key, const gtsam::Point3& gps_E, gtsam::Key alignment_key,
+                 const gtsam::SharedNoiseModel& model, const gtsam::Pose3& body_P_sensor)
+        : Base(model, pose_key, alignment_key), gps_E_(gps_E), body_P_sensor_(body_P_sensor) {}
 
-    /** h(x)-z */
-    Vector evaluateError(const Pose3& p, const Pose3& E_T_V, boost::optional<Matrix&> H1 , boost::optional<Matrix&> H2 ) const override;
+    ~newGPSFactor() override = default;
 
-    void print(const std::string& s = "", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
+    /// Error h(V_T_B, E_T_V) - gps_E with Jacobians H1 = d/dV_T_B, H2 = d/dE_T_V.
+    gtsam::Vector evaluateError(const gtsam::Pose3& V_T_B, const gtsam::Pose3& E_T_V,
+                                gtsam::OptionalMatrixType H1,
+                                gtsam::OptionalMatrixType H2) const override;
+
+    void print(const std::string& s = "",
+               const gtsam::KeyFormatter& keyFormatter = gtsam::DefaultKeyFormatter) const override;
 
 private:
-
-    /** Serialization function */
-    friend class boost::serialization::access;
-    template<class ARCHIVE>
-    void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
-        ar & boost::serialization::make_nvp("NoiseModelFactor2",
-                                            boost::serialization::base_object<Base>(*this));
-        ar & BOOST_SERIALIZATION_NVP(gps_P_);
-    }
-
-};
-
-class newGPSFactor2: public NoiseModelFactor1<Pose3> {
-
-    Point3  gps_P_;
-    typedef NoiseModelFactor1<Pose3> Base;
-
-    Pose3 body_P_sensor; // extrinsic as a pose - identity rotation  + extrinsic translation
-
-public:
-
-    // constructor for the factor
-    newGPSFactor2(Key gps_key, const Point3& gps_P_, const SharedNoiseModel& model, const Pose3& body_P_sensor):
-            Base(model, gps_key), gps_P_(gps_P_), body_P_sensor(body_P_sensor) {
-    }
-
-    Vector evaluateError(const Pose3& p,
-                         boost::optional<gtsam::Matrix&> H = boost::none) const override;
-
-    void print(const std::string& s = "", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
-
-private:
-
-    /** Serialization function */
-    friend class boost::serialization::access;
-    template<class ARCHIVE>
-    void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
-        ar & boost::serialization::make_nvp("NoiseModelFactor2",
-                                            boost::serialization::base_object<Base>(*this));
-        ar & BOOST_SERIALIZATION_NVP(gps_P_);
-    }
+    gtsam::Point3 gps_E_;        // GPS fix in the local ENU frame
+    gtsam::Pose3 body_P_sensor_; // GPS antenna extrinsic; only the translation is used
 };

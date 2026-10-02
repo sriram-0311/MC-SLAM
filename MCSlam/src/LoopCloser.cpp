@@ -1,6 +1,5 @@
 
 #include "MCSlam/LoopCloser.h"
-#include "gtest/gtest.h"
 // TODO: Check for inliers based on % rather than a values.
 // TODO: Decouple DloopDetector.
 // TODO: Add choice between the geometrical verification methods, in config file.

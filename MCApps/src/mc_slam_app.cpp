@@ -13,11 +13,8 @@
 #include "MCDataUtils/CamArrayConfig.h"
 #include "MCDataUtils/MCDataUtilParams.h"
 
-#include "LiveViewer.h"
 
 #include "MCDataUtils/DatasetReader.h"
-#include "MCDataUtils/RosbagParser.h"
-#include "MCDataUtils/RosDataReader.h"
 
 #include <chrono>
 //// OPENGV ////
@@ -30,7 +27,6 @@
 #include <opengv/relative_pose/methods.hpp>
 #include "MCSlam/time_measurement.hpp"
 ///////
-#include <ros/ros.h>
 #include <opencv2/core/eigen.hpp>
 
 
@@ -72,30 +68,8 @@ int main(int argc , char** argv){
 
     //Initialize get the data from ros bag using ros reader
     //read the dataset and calibration given settings for the refocus object
-    DatasetReaderBase* datareader;
-
-    if(settings.parse_bag){
-
-        ros::init(argc, argv, "slam_node");
-        ros::NodeHandle nh;
-
-        datareader = new RosbagParser();
-
-    }
-    else{
-        if (settings.is_ros){
-            // if ROS is enabled Initialize the ROS node and
-            ros::init(argc, argv, "slam_node"); // Initializing the ros node
-            ros::NodeHandle nh;
-            datareader = new RosDataReader(nh);
-        }
-
-        else{
-            ros::init(argc, argv, "slam_node"); // Initializing the ros node
-            ros::NodeHandle nh;
-            datareader = new DatasetReader();
-        }
-    }
+    // TODO(port): replace with a dataset-specific reader (EuRoC) selected from settings.
+    DatasetReaderBase* datareader = new DatasetReader();
     datareader->initialize(settings);
 
 
@@ -128,8 +102,6 @@ int main(int argc , char** argv){
 
    //IN a loop datareader->getNext() or datareader->getNextGPU(), refocus.updateImgs() or refocus.updateImgsGPU()
    // refocus.updateZMap() , optional processing , perform refocus and show in GUI
-   ros::AsyncSpinner spinner(0); // Use max cores possible for mt
-   spinner.start();
 
    // This method runs the SLAM program in a loop for each new image.
    // user can give keyboard inputs to control the loop for obtaining next image,
@@ -160,8 +132,8 @@ int main(int argc , char** argv){
 bool updateData(FrontEnd& frontend, DatasetReaderBase &dataReader) {
 
     vector<Mat> imgs, segMasks;
-    std::deque<sensor_msgs::Imu> imu_msgs;
-    std::deque<sensor_msgs::NavSatFix> gps_msgs;
+    std::deque<mcslam::ImuSample> imu_msgs;
+    std::deque<mcslam::GnssFix> gps_msgs;
     
     vector<string> segmaskNames;
     double timeStamp;
@@ -248,7 +220,7 @@ void process_GPS_frames(FrontEnd& frontend, Backend& backend){
 
     while (!frontend.gps_msgs_combined.size() == 0) {
 
-        sensor_msgs::NavSatFix gps_msg = frontend.gps_msgs_combined.front();
+        mcslam::GnssFix gps_msg = frontend.gps_msgs_combined.front();
         // check: redundant - same as geodetic - enu frontend
         tuple<double, double, double> gps_message_enu = backend.processGPS_ENU(gps_msg);
         bool gps_valid = true;
@@ -275,7 +247,7 @@ void process_GPS_frames(FrontEnd& frontend, Backend& backend){
             if (gps_valid) {
 
                 // get the gps message time
-                double gps_time = frontend.gps_msgs_combined.front().header.stamp.toSec();
+                double gps_time = frontend.gps_msgs_combined.front().timestamp;
                 frontend.gps_data_.tStamp = gps_time;
 
 
@@ -350,7 +322,6 @@ void process_frames(FrontEnd& frontend, Backend& backend){
         frontend.initialized_ = INITIALIZED;
         if (!frontend.trackingStatus) {
             double image_time = frontend.currentFrame->timeStamp;
-            ros::Time time_param2(image_time);
             frontend.imu_preintegration(image_time);
             if(frontend.checkGlobalRelocalization()){
                 frontend.trackingStatus = true;
@@ -444,7 +415,6 @@ void process_frames(FrontEnd& frontend, Backend& backend){
         frontend.initialized_ = INITIALIZED;
         if (!frontend.trackingStatus) {
             double image_time = frontend.currentFrame->timeStamp;
-            ros::Time time_param2(image_time);
             frontend.imu_preintegration(image_time);
             if(frontend.checkGlobalRelocalization()){
                 frontend.trackingStatus = true;
@@ -473,7 +443,6 @@ void process_frames(FrontEnd& frontend, Backend& backend){
             // new frame is created in updateData function and added to frontend
             // preintegrate IMU data upto this time
             double image_time = frontend.currentFrame->timeStamp;
-            ros::Time time_param2(image_time);
             frontend.imu_preintegration(image_time);
             // predict the pose of the car upto this time using IMU relative to the previous keyframe
             VLOG(0) << "previous pose before imu prediction " << backend.prevPose_ << endl;
@@ -623,7 +592,6 @@ void process_frames(FrontEnd& frontend, Backend& backend){
                 frontend.first_keyframe = false;
             }
             double image_time = frontend.lfFrames.back()->timeStamp;
-            ros::Time time_param2(image_time);
             frontend.imu_preintegration(image_time);
 
             // gtsam::imuBias::ConstantBias prevBias_ = frontend.bias_prior;
@@ -731,8 +699,6 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
 
     //need this - vlog values?
     while (true) {
-        if (dataReader.settings.is_ros && ! ros::ok())
-            return;
         int key = waitKey(1);
         if ((key & 255) != 255)
         {

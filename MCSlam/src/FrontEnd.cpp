@@ -3,7 +3,7 @@
 //
 #include "MCSlam/FrontEnd.h"
 #include "MCSlam/LoopCloser.h"
-#include "DUtils.h"
+#include <DUtils/DUtils.h>
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -13,8 +13,7 @@
 #include <opengv/sac_problems/point_cloud/PointCloudSacProblem.hpp>
 
 //opencv
-#include <opencv2/sfm/triangulation.hpp>
-#include <opencv2/sfm/projection.hpp>
+#include "MCSlam/Triangulation.h"
 
 
 
@@ -177,9 +176,9 @@ void FrontEnd::compute_overlap() {
 
         overlap_masks.push_back(overlap_grid.clone());
         Mat overlap_grid_c, imgg;
-        cvtColor(overlap_grid, overlap_grid_c, CV_GRAY2BGR);
+        cvtColor(overlap_grid, overlap_grid_c, cv::COLOR_GRAY2BGR);
 
-        cvtColor(currentFrame->imgs[c1], imgg, CV_GRAY2BGR);
+        cvtColor(currentFrame->imgs[c1], imgg, cv::COLOR_GRAY2BGR);
         overlap_grid_c = overlap_grid_c + imgg;
         Mat normed_img;
         cv::normalize(overlap_grid_c, normed_img, 0,255, cv::NORM_MINMAX);
@@ -303,7 +302,7 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
 
             cv::Mat pt3d_sfm;
             Eigen::Vector3d pt;
-            cv::sfm::triangulatePoints(xx, PJs, pt3d_sfm);
+            mcslam::geom::triangulatePoints(xx, PJs, pt3d_sfm);
 
             if(pt3d_sfm.at<double>(2, 0) < 40 and pt3d_sfm.at<double>(2, 0) > 0.5 ){
 
@@ -665,7 +664,7 @@ void FrontEnd::filterIntraMatches(std::vector<IntraMatch>& matches_map, MultiCam
             }
 
             cv::Mat pt3d_sfm;
-            cv::sfm::triangulatePoints(xx, PJs, pt3d_sfm);
+            mcslam::geom::triangulatePoints(xx, PJs, pt3d_sfm);
             //////////////////////////////////////////////////////////////////////////
             //update the support point
             // specify in terms of inverse Z
@@ -1355,7 +1354,7 @@ void FrontEnd::check_tri_sp(int num_views, vector<int> view_inds, IntraMatch& ma
     }
 
     cv::Mat pt3d_sfm;
-    cv::sfm::triangulatePoints(xx, PJs, pt3d_sfm);
+    mcslam::geom::triangulatePoints(xx, PJs, pt3d_sfm);
 
     Mat projected_sfm = camconfig_.K_mats_[0] * pt3d_sfm;
     double expected_x_sfm = projected_sfm.at<double>(0,0) / projected_sfm.at<double>(2,0);
@@ -1373,9 +1372,9 @@ void FrontEnd::check_tri_sp(int num_views, vector<int> view_inds, IntraMatch& ma
         Mat Rt = build_Rt(camconfig_.R_mats_[indd], camconfig_.t_mats_[indd]);
         Mat P1 = camconfig_.K_mats_[indd] * Rt;
         Mat homo;
-        sfm::euclideanToHomogeneous(pt3d_sfm, homo);
+        mcslam::geom::euclideanToHomogeneous(pt3d_sfm, homo);
         Mat x_projected_sfm;
-        sfm::homogeneousToEuclidean(P1 * homo, x_projected_sfm) ;
+        mcslam::geom::homogeneousToEuclidean(P1 * homo, x_projected_sfm) ;
         cout<<indd<< "  : "<<x_projected_sfm.at<double>(0,0)<<","<<x_projected_sfm.at<double>(1,0)<<"||";
     }
     cout<<"\n--------------------"<<endl;
@@ -2689,7 +2688,7 @@ bool FrontEnd::initialization(){
                     ///// Triangulation using  opencv sfm and normalized coordinates///////////
                     //triangulate and get the 3D point
                     cv::Mat pt3d;
-                    cv::sfm::triangulatePoints(xs, PJs, pt3d);
+                    mcslam::geom::triangulatePoints(xs, PJs, pt3d);
 
                     //TODO: check if this is correct - it is in the for loop below. but why?
                 //    if(pt3d.at<double>(2,0) < 0){
@@ -2906,7 +2905,7 @@ bool FrontEnd::initialization_non_overlapping(vector<DMatch> &mono_matches){
         ///// Triangulation using  opencv sfm and normalized coordinates///////////
         //triangulate and get the 3D point
         cv::Mat pt3d;
-        cv::sfm::triangulatePoints(xs, PJs, pt3d);
+        mcslam::geom::triangulatePoints(xs, PJs, pt3d);
 //        if(pt3d.at<double>(2,0) < 0){
 //            inliers[i] = false;
 //            continue;
@@ -4186,7 +4185,7 @@ void FrontEnd::bundleAdjustIntraMatches(std::vector<IntraMatch>& tmp_intra_match
         //result.print("Final Result");
        /* for(int facInd =0 ; facInd < (graph.size() -5 - intraInd); facInd++) {
             if (graph.at(facInd)) {
-                boost::shared_ptr<gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>> fac = reinterpret_pointer_cast<gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>>(
+                std::shared_ptr<gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>> fac = std::static_pointer_cast<gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, gtsam::Cal3_S2>>(
                         graph.at(facInd));
                 // check if this is an oulier?
                 //cout<<"key1 "<<symbolChr(fac->key1())<<symbolIndex(fac->key1())<<endl;
@@ -4211,7 +4210,7 @@ void FrontEnd::bundleAdjustIntraMatches(std::vector<IntraMatch>& tmp_intra_match
         }*/
 
     }
-    for (gtsam::Values::iterator it = result.begin(); it != result.end(); ++it) {
+    for (auto it = result.begin(); it != result.end(); ++it) {
         gtsam::Symbol sid = it->key;
         if (optim_type != 0){
             if (sid.chr() == 'l') {
@@ -4374,7 +4373,7 @@ void FrontEnd::OptimizePose(vector<DMatch> matches, vector<int> lids, vector<boo
         gtsam::Pose3 curest = result.at<gtsam::Pose3>(Symbol('x', 0));
         for(int facInd =0 ; facInd < graph.size(); facInd++){
             if(graph.at(facInd)){
-                boost::shared_ptr<RigResectioningFactor> fac = reinterpret_pointer_cast<RigResectioningFactor>(graph.at(facInd));
+                std::shared_ptr<RigResectioningFactor> fac = std::static_pointer_cast<RigResectioningFactor>(graph.at(facInd));
                 // check if this is an oulier?
                 gtsam::Point2 errVec = fac->evaluateError(curest);
 
@@ -5878,7 +5877,7 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
         //todo: Triangulation methods implementation
         ///// Triangulation using  opencv sfm and normalized coordinates///////////
         cv::Mat pt3d;
-        cv::sfm::triangulatePoints(xs, PJs, pt3d);
+        mcslam::geom::triangulatePoints(xs, PJs, pt3d);
         // check the reprojection errors of the points and the parallalx angle
         int jj=0;
 
@@ -6549,7 +6548,7 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
                         gtsam::Point3 curest = result.at<gtsam::Point3>(Symbol('P', 0));
                         for(int facInd =0 ; facInd < graph.size(); facInd++) {
                             if (graph.at(facInd)) {
-                                boost::shared_ptr<TriangulationFactor<PinholeCamera<Cal3_S2>>> fac = reinterpret_pointer_cast<TriangulationFactor<PinholeCamera<Cal3_S2>>>(
+                                std::shared_ptr<TriangulationFactor<PinholeCamera<Cal3_S2>>> fac = std::static_pointer_cast<TriangulationFactor<PinholeCamera<Cal3_S2>>>(
                                         graph.at(facInd));
                                 // check if this is an oulier?
                                 gtsam::Point2 errVec = fac->evaluateError(curest);
@@ -7277,7 +7276,7 @@ void FrontEnd::tracksForHist()
     //show only the tracks of features matched in first two frames
     /*Mat img_tracks;
     img_tracks = img2.clone();
-    cvtColor(img2, img_tracks, CV_GRAY2BGR);
+    cvtColor(img2, img_tracks, cv::COLOR_GRAY2BGR);
     std::map<int, Landmark*>::iterator it;
 
     for(it = map_mono->mapPoints.begin() ; it != map_mono->mapPoints.end() ; ++it) {
@@ -7309,30 +7308,11 @@ void FrontEnd::tracksForHist()
 
 }
 
-void FrontEnd::featureStats(){
-    cout<<"AT HISTOGRAM PLOT"<<endl;
-    std::map<int, Landmark*>::iterator it;
-    vector<int> hist_data, hist_data_mono;
-    for(it = map->mapPoints.begin() ; it != map->mapPoints.end() ; ++it) {
-        Landmark *l = it->second;
-        //hist_data.push_back(l->frame_ids.size());
-    }
-    for(it = map_mono->mapPoints.begin() ; it != map_mono->mapPoints.end() ; ++it) {
-        Landmark *l = it->second;
-        //hist_data_mono.push_back(l->frame_ids.size());
-    }
-    vector<int> bins = {2,3,4,5,6,7,8,9,10,11,12,13};
-    //plot the histogram of tracked points
-    matplotlibcpp::hist_bins(hist_data, bins, "b", 0.2, true);
-    matplotlibcpp::hist_bins(hist_data_mono, bins, "r", 0.2, true);
-    matplotlibcpp::show();
-}
-
 std::string FrontEnd::matToString(const cv::Mat& mat)
 {
     int dims = mat.dims;
 
-    if(dims < 0 || dims > CV_MAX_DIM)
+    if(dims < 0 || dims > 32 /* CV_MAX_DIM */)
     {
         std::cout << "Invalid number of dimensions: " << dims << std::endl;
         return " ";
@@ -7800,14 +7780,14 @@ void FrontEnd::prepareOpengvData(vector<Point2f>& kps_1, vector<Point2f>& kps_2,
 
 ///  IMU Pre-integration related functions
 
-Eigen::Quaterniond  FrontEnd::world_imu_frame(std::deque<sensor_msgs::Imu>& imu_msgs){
+Eigen::Quaterniond  FrontEnd::world_imu_frame(std::deque<mcslam::ImuSample>& imu_msgs){
 
    Eigen::MatrixXd acceleration_matrix(imu_msgs.size(), 3);
 
    for(int i=0; i<imu_msgs.size(); i++){
-       acceleration_matrix(i,0) = imu_msgs[i].linear_acceleration.x;
-       acceleration_matrix(i,1) = imu_msgs[i].linear_acceleration.y;
-       acceleration_matrix(i,2) = imu_msgs[i].linear_acceleration.z;
+       acceleration_matrix(i,0) = imu_msgs[i].accel.x();
+       acceleration_matrix(i,1) = imu_msgs[i].accel.y();
+       acceleration_matrix(i,2) = imu_msgs[i].accel.z();
    }
 
    Eigen::MatrixXd g_matrix(imu_msgs.size(), 3);
@@ -7922,7 +7902,7 @@ void FrontEnd::imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias)
    return;
 }
 
-void FrontEnd::imu_initialize(std::deque<sensor_msgs::Imu> imu_msgs, double image_time){
+void FrontEnd::imu_initialize(std::deque<mcslam::ImuSample> imu_msgs, double image_time){
 
         if(imu_msgs_initialized.size() < 200){
             VLOG(0) << "IMU NOT INITIALIZED" << endl;
@@ -7947,12 +7927,12 @@ void FrontEnd::imu_initialize(std::deque<sensor_msgs::Imu> imu_msgs, double imag
         double gyr_z_sum = 0;
 
         for (int i = 0; i< imu_msgs_initialized.size(); i++){
-            double acc_x = imu_msgs_initialized[i].linear_acceleration.x;
-            double acc_y = imu_msgs_initialized[i].linear_acceleration.y;
-            double acc_z = imu_msgs_initialized[i].linear_acceleration.z;
-            double gyr_x = imu_msgs_initialized[i].angular_velocity.x;
-            double gyr_y = imu_msgs_initialized[i].angular_velocity.y;
-            double gyr_z = imu_msgs_initialized[i].angular_velocity.z;
+            double acc_x = imu_msgs_initialized[i].accel.x();
+            double acc_y = imu_msgs_initialized[i].accel.y();
+            double acc_z = imu_msgs_initialized[i].accel.z();
+            double gyr_x = imu_msgs_initialized[i].gyro.x();
+            double gyr_y = imu_msgs_initialized[i].gyro.y();
+            double gyr_z = imu_msgs_initialized[i].gyro.z();
 
             acc_x_sum += acc_x;
             acc_y_sum += acc_y;
@@ -8001,7 +7981,7 @@ void FrontEnd::imu_values_removal(double image_time){
     unique_lock<mutex> lock(mMutexImu);
     // remove messages that came before the first keyframe
     while(!imu_msgs_combined.empty()){
-        double imuTime = imu_msgs_combined.front().header.stamp.toSec();
+        double imuTime = imu_msgs_combined.front().timestamp;
         if(imuTime > image_time){
             break;
         }
@@ -8017,16 +7997,13 @@ void FrontEnd::imu_preintegration(double image_time){
 
     // preintegration
     unique_lock<mutex> lock(mMutexImu);
-    ros::Time time_param(image_time);
 
     VLOG(1) << "Time difference between images: " <<   image_time - prev_image_time << endl;
     VLOG(1) << "IMU messages in this time interval: " <<  (image_time - prev_image_time) * 200<< endl;
-    ros::Time time_imu(imu_msgs_combined.front().header.stamp.sec);
-    ros::Time time_imu1(imu_msgs_combined.front().header.stamp.nsec);
     int initial_size = imu_msgs_combined.size();
     VLOG(0) << "number of imu messages before preintegration: " << imu_msgs_combined.size() << endl;
-    VLOG(1) << "image time: " << time_param.sec << "." << time_param.nsec<< endl;
-    VLOG(1) << " first imu time " << std::setprecision(15) << imu_msgs_combined.front().header.stamp.toSec() << endl;
+    VLOG(1) << "image time: " << std::setprecision(15) << image_time << endl;
+    VLOG(1) << " first imu time " << std::setprecision(15) << imu_msgs_combined.front().timestamp << endl;
     imu_message_empty = false;
 
     if(imu_msgs_combined.empty()){
@@ -8036,7 +8013,7 @@ void FrontEnd::imu_preintegration(double image_time){
     }
 
     while(!imu_msgs_combined.empty()){
-        double imuTime = imu_msgs_combined.front().header.stamp.toSec();
+        double imuTime = imu_msgs_combined.front().timestamp;
 
         // assert (imuTime < image_time) ;
         if(imuTime > image_time){
@@ -8045,13 +8022,13 @@ void FrontEnd::imu_preintegration(double image_time){
 
         double dt = (last_imu_time < 0) ? (1.0 / 200.0) : (imuTime - last_imu_time);
 
-        imu_integrator_comb->integrateMeasurement(gtsam::Vector3(imu_msgs_combined.front().linear_acceleration.x, imu_msgs_combined.front().linear_acceleration.y, imu_msgs_combined.front().linear_acceleration.z),
-                                                 gtsam::Vector3(imu_msgs_combined.front().angular_velocity.x, imu_msgs_combined.front().angular_velocity.y, imu_msgs_combined.front().angular_velocity.z),
+        imu_integrator_comb->integrateMeasurement(gtsam::Vector3(imu_msgs_combined.front().accel.x(), imu_msgs_combined.front().accel.y(), imu_msgs_combined.front().accel.z()),
+                                                 gtsam::Vector3(imu_msgs_combined.front().gyro.x(), imu_msgs_combined.front().gyro.y(), imu_msgs_combined.front().gyro.z()),
                                                  dt);
 
 
         appendIMUValue(&imu_msgs_combined.front());
-        last_imu_time = imu_msgs_combined.front().header.stamp.toSec();
+        last_imu_time = imu_msgs_combined.front().timestamp;
 
         imu_msgs_combined.pop_front();
     }
@@ -8080,7 +8057,7 @@ void FrontEnd::imu_preintegration(double image_time){
 
 
 // GPS related functions
-tuple<double, double, double> FrontEnd::geodetic_to_enu(sensor_msgs::NavSatFix gps_msg){
+tuple<double, double, double> FrontEnd::geodetic_to_enu(mcslam::GnssFix gps_msg){
 
     double x, y, z;
     
@@ -8114,7 +8091,7 @@ tuple<double, double, double> FrontEnd::enu_wrt_origin(tuple<double, double, dou
 
 }
 
-void FrontEnd::gps_ENU_reference_params(sensor_msgs::NavSatFix gps_msg){
+void FrontEnd::gps_ENU_reference_params(mcslam::GnssFix gps_msg){
 
     refLat = gps_msg.latitude;
     refLon = gps_msg.longitude;
@@ -8142,7 +8119,7 @@ void FrontEnd::interpolation_vins_GPS(vector<gps_umeyama_data> gps_umeyama_data_
         //2. compute the alpha for interpolation
         double kf1_time = gps_umeyama_data_vec[i].prev_keyframe->timeStamp;
         double kf2_time = gps_umeyama_data_vec[i].next_keyframe->timeStamp;
-        double gps_time = gps_umeyama_data_vec[i].gps_msg.header.stamp.toSec();
+        double gps_time = gps_umeyama_data_vec[i].gps_msg.timestamp;
 
         double alpha = (gps_time - kf1_time)/(kf2_time - kf1_time);
 
@@ -8209,7 +8186,7 @@ void FrontEnd::interpolation_vins_GPS(vector<gps_umeyama_data> gps_umeyama_data_
 
 
 
-void FrontEnd::gps_initialize_kabsch(std::deque<sensor_msgs::NavSatFix>  gps_msgs_combined, MultiCameraFrame* vins_kf){
+void FrontEnd::gps_initialize_kabsch(std::deque<mcslam::GnssFix>  gps_msgs_combined, MultiCameraFrame* vins_kf){
 
 
     cv::Mat vins_pose_mat = vins_kf->pose;
@@ -8227,7 +8204,7 @@ void FrontEnd::gps_initialize_kabsch(std::deque<sensor_msgs::NavSatFix>  gps_msg
             //to handle cases when we have vision kfs coming late and have only 1 kf between 2 gps messages
             if(gps_umeyama_data_vec.back().next_keyframe == NULL ){
                 // check: when does this condition not get satisfied?
-                if(gps_umeyama_data_vec.back().gps_msg.header.stamp.toSec() > vins_kf->timeStamp){
+                if(gps_umeyama_data_vec.back().gps_msg.timestamp > vins_kf->timeStamp){
                     return;
                 }
                 // check: redundant?
@@ -8313,12 +8290,12 @@ bool FrontEnd::validGPSmessage(gps_message gps_data_){
 
         double KF_time = lfFrames.back()->timeStamp;
 
-        VLOG(0) <<"gps message time " << std::setprecision(15) << gps_msgs_combined.front().header.stamp.toSec();
+        VLOG(0) <<"gps message time " << std::setprecision(15) << gps_msgs_combined.front().timestamp;
         VLOG(0) <<"prev image time " << std::setprecision(15) << KF_time;
 
-        if(gps_msgs_combined.front().header.stamp.toSec() < KF_time){
+        if(gps_msgs_combined.front().timestamp < KF_time){
             // old message:
-//            VLOG(0) <<"gps message time " << std::setprecision(15) << gps_msgs_combined.front().header.stamp.toSec();
+//            VLOG(0) <<"gps message time " << std::setprecision(15) << gps_msgs_combined.front().timestamp;
 //            VLOG(0) <<"prev image time " << std::setprecision(15) << KF_time;
             VLOG(0) << "Old GPS message" << endl;
             gps_msgs_combined.pop_front();
@@ -8326,7 +8303,7 @@ bool FrontEnd::validGPSmessage(gps_message gps_data_){
 
         }
 
-        if(gps_msgs_combined.front().header.stamp.toSec() > KF_time + 0.5){
+        if(gps_msgs_combined.front().timestamp > KF_time + 0.5){
             // new message - wait for more vision frames maybe
             // check:
             VLOG(0) << "New GPS message" << endl;
@@ -8352,13 +8329,13 @@ bool FrontEnd::validGPSmessage(gps_message gps_data_){
 
 
 
-void FrontEnd::appendIMUValue(sensor_msgs::Imu* message)
+void FrontEnd::appendIMUValue(mcslam::ImuSample* message)
 {
 //    VLOG(0) << "Appending IMU values..." << std::endl;
     logFile2_ << "imu_raw" << " " << setprecision(20)
-    << message->header.stamp.toSec() << " "
-    << message->linear_acceleration.x << " " << message->linear_acceleration.y << " " << message->linear_acceleration.z << " "
-    << message->angular_velocity.x << " " << message->angular_velocity.y << " " << message->angular_velocity.z << "\n";
+    << message->timestamp << " "
+    << message->accel.x() << " " << message->accel.y() << " " << message->accel.z() << " "
+    << message->gyro.x() << " " << message->gyro.y() << " " << message->gyro.z() << "\n";
 }
 
 void FrontEnd::appendGPSValue(gps_message gps_data_stored, int gps_kf){

@@ -4,6 +4,10 @@
 
 #include <MCSlam/FrontEnd.h>
 #include "MCSlam/Backend.h"
+
+// Serialization registration must live in exactly one translation unit.
+BOOST_CLASS_EXPORT_GUID(gtsam::CombinedImuFactor, "gtsam::CombinedImuFactor");
+BOOST_CLASS_EXPORT(gtsam::PreintegratedCombinedMeasurements);
 #include <chrono>
 //// This is the class for writing optimization functions
 //// todo: Create a ISAM instance, setup the factor graph and initialise the pose prior.
@@ -82,16 +86,8 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
 //        params.verbosity = gtsam::NonlinearOptimizerParams::SUMMARY;
         params.maxIterations = 15;
     }
-    else if(optimizationMethod == 2){
-        double lag = 3.0;
-        params.lambdaInitial = 1e-2;
-        params.maxIterations = 15;
-        fixedLagOptimizer = gtsam::BatchFixedLagSmoother(lag, params );
-
-
-    }
     else{
-        VLOG(0)<<"WRONG OPTIMIZATION METHOD OPTION. Must be 0-ISAM2 1-LevenbergMarquardt 2-fixedlag levenberg";
+        VLOG(0)<<"WRONG OPTIMIZATION METHOD OPTION. Must be 0 (iSAM2) or 1 (Levenberg-Marquardt)";
         exit(0);
     }
 
@@ -109,7 +105,7 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
 
 
     // Smart factors related
-    cameraRig = static_cast<boost::shared_ptr<gtsam::CameraSet<gtsam::PinholePose< gtsam::Cal3_S2 > > > >(
+    cameraRig = static_cast<std::shared_ptr<gtsam::CameraSet<gtsam::PinholePose< gtsam::Cal3_S2 > > > >(
             new gtsam::CameraSet<gtsam::PinholePose< gtsam::Cal3_S2 > >());
 
 
@@ -1322,7 +1318,6 @@ void Backend::insertLandmarkInGraph(Landmark *l, int prevKFID, int curKFID, bool
 
     int lid = l->lId;
 
-    newTimeStamps[gtsam::Symbol('l', lid)] = (windowCounter-1);
 
 //    VLOG(0) << "prev stateid " << prevStateID;
 //    VLOG(0) << "curr state id " << curStateID;
@@ -1343,7 +1338,6 @@ void Backend::insertLandmarkInGraph(Landmark *l, int prevKFID, int curKFID, bool
       /// state factor record
       xFactorRecord[curStateID] = vector<int>();
       //This will be used only in case of fixedlag smoothing
-      newTimeStamps[gtsam::Symbol('x', curStateID)] = (windowCounter-1);
        VLOG(0)<<"Inserting Initial Estimate for x"<<curStateID<<endl;
       VLOG(1)<<"Current pose being added: "<<current_pose<<endl;
 
@@ -1363,7 +1357,6 @@ void Backend::insertLandmarkInGraph(Landmark *l, int prevKFID, int curKFID, bool
            initialEstimate.insert(gtsam::Symbol('x', prevStateID), previous_pose);
            /// state factor record
            xFactorRecord[prevStateID] = vector<int>();
-           newTimeStamps[gtsam::Symbol('x', prevStateID)] = (windowCounter-1);
            VLOG(1)<<"Inserting Initial Estimate for x"<<prevStateID<<endl;
            VLOG(1) << " Pose added is " << previous_pose << endl;
            VLOG(1)  << "PREV KF" << prev_Kf << " and " << "prevStateID" << prevStateID << endl;
@@ -1953,7 +1946,6 @@ bool Backend::RelocalizationGraphConstructor(gtsam::NavState currentState) {
             }
         }
         // insert timestamp for the current keyframe
-        newTimeStamps[gtsam::Symbol('x', frontEnd->currentFrame->kfID)] = frontEnd->currentFrame->kfID;
 //    }
     //
 //    addIMUFactor(prev_Kf, frontEnd->currentFrame->kfID);
@@ -2567,10 +2559,8 @@ bool Backend::addKeyFrameMulti() {
 
 
     // VLOG(3)<<"graph size: "<<graph.size()<<endl;
-    if(optimizationMethod != 2){
-        if (windowCounter%windowSize != 0)
-            ret = false;
-    }
+    if (windowCounter%windowSize != 0)
+        ret = false;
     windowCounter++;
     // VLOG(3)<<"add keyframe optimize flag: "<<ret<<endl;
 
@@ -2579,7 +2569,7 @@ bool Backend::addKeyFrameMulti() {
 }
 
 
-tuple<double, double, double> Backend::processGPS_NED(sensor_msgs::NavSatFix gps_msg){
+tuple<double, double, double> Backend::processGPS_NED(mcslam::GnssFix gps_msg){
 
 
     // convert to ENU frame
@@ -2605,7 +2595,7 @@ tuple<double, double, double> Backend::processGPS_NED(sensor_msgs::NavSatFix gps
 
 }
 
-tuple<double, double, double> Backend::processGPS_ENU(sensor_msgs::NavSatFix gps_msg){
+tuple<double, double, double> Backend::processGPS_ENU(mcslam::GnssFix gps_msg){
 
 
     // convert to ENU frame
@@ -2625,7 +2615,7 @@ double Backend::euclidean(tuple<double, double, double> gps_msg1, tuple<double, 
 
 
 
-void Backend::addGPSFactor(std::deque<sensor_msgs::NavSatFix> &gps_msgs_combined, int current_pose_id ){
+void Backend::addGPSFactor(std::deque<mcslam::GnssFix> &gps_msgs_combined, int current_pose_id ){
 
 
     /*
@@ -2639,7 +2629,7 @@ void Backend::addGPSFactor(std::deque<sensor_msgs::NavSatFix> &gps_msgs_combined
         use_E_T_V_init_est = true;
     }
 
-    sensor_msgs::NavSatFix gps_msg = gps_msgs_combined.front();
+    mcslam::GnssFix gps_msg = gps_msgs_combined.front();
 
     // GPS measurement noise
     auto correction_noise = noiseModel::Diagonal::Sigmas(Vector3(1, 1, 1));
@@ -3040,7 +3030,6 @@ bool Backend::addKeyFrameNov(){
     if(num_lms_filtered < 15){
         graph.resize(0);
         initialEstimate.clear();
-        newTimeStamps.clear();
         return false;
     }
 
@@ -3135,7 +3124,6 @@ bool Backend::optimizePosesLandmarks() {
             // graph.print("\nFactor Graph:\n");
             initialEstimate.clear();
             toBeRemovedFactorIndices.clear();
-            newTimeStamps.clear();
             // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
             // If accuracy is desired at the expense of time, update(*) can be called additional times
             // to perform multiple optimizer iterations every step.
@@ -3248,7 +3236,6 @@ bool Backend::optimizePosesLandmarks() {
             xFactorRecord.clear();
             currentEstimate.clear();
             toBeRemovedFactorIndices.clear();
-            newTimeStamps.clear();
             graph.resize(0);
             initialEstimate.clear();
             currentEstimate.clear();
@@ -3315,91 +3302,6 @@ bool Backend::optimizePosesLandmarks() {
             frontEnd->imu_integrator_comb->resetIntegrationAndSetBias(prevBias_);
         }
     }
-    else if(optimizationMethod == 2){
-        VLOG(0) << "Fixed Lag Smoother" << endl;
-        // perform fixed lag smoothing only if graph size is greater than 2
-        if (frontEnd->lfFrames.size() > 1) {
-            if (windowCounter >= 2) {
-                try {
-//                VLOG(0) << "Fixed Lag Smoother update - Graph initial error " << graph.error(initialEstimate) << endl;
-                    fixedLagOptimizer.update(graph, initialEstimate, newTimeStamps);
-                    graph.resize(0);
-                    initialEstimate.clear();
-                    newTimeStamps.clear();
-                    VLOG(0) << "Number of factors in graph : " << fixedLagOptimizer.getFactors().size();
-                    // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
-                    // If accuracy is desired at the expense of time, update(*) can be called additional times
-                    // to perform multiple optimizer iterations every step.
-//                isam.update();
-
-//                    currentEstimate = fixedLagOptimizer.calculateEstimate();
-//                VLOG(0) << "Fixed Lag Smoother update - Graph final error " << graph.error(currentEstimate) << endl;
-
-                    if (frontEnd->useIMU && prev_Kf > -1) {
-                        // reset imu preintegration object
-                        frontEnd->imu_integrator_comb->resetIntegrationAndSetBias(prevBias_);
-                        // update the previous state
-                        prev_Kf = frontEnd->currentFrame->kfID;
-//                        if (currentEstimate.exists(gtsam::Symbol('x', prev_Kf)))
-                            prevPose_ = fixedLagOptimizer.calculateEstimate<gtsam::Pose3>(gtsam::Symbol('x', frontEnd->currentFrame->kfID));
-//                        if (currentEstimate.exists(gtsam::Symbol('b', prev_Kf)))
-                            prevBias_ = fixedLagOptimizer.calculateEstimate<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', frontEnd->currentFrame->kfID));
-//                            prevBias_ = currentEstimate.at<gtsam::imuBias::ConstantBias>(gtsam::Symbol('b', prev_Kf));
-//                        if (currentEstimate.exists(gtsam::Symbol('v', prev_Kf)))
-                            prevVel_ = fixedLagOptimizer.calculateEstimate<gtsam::Vector3>(gtsam::Symbol('v', frontEnd->currentFrame->kfID));
-//                            prevVel_ = currentEstimate.at<gtsam::Vector3>(gtsam::Symbol('v', prev_Kf));
-                        prevState_ = gtsam::NavState(prevPose_, prevVel_);
-                    } else if (prev_Kf == -1) {
-                        prev_Kf = frontEnd->currentKFID - 1;
-                        prevPose_ = currentEstimate.at<gtsam::Pose3>(gtsam::Symbol('x', prev_Kf));
-                    }
-
-                }
-                catch (IndeterminantLinearSystemException &e) {
-                    Symbol sym = gtsam::Symbol(e.nearbyVariable());
-                    if (sym.chr() == 'l') {
-
-                        VLOG(0) << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-                        // it is  landmark.
-                        //extract the edges corresponding to that landmark
-
-                        map<int, vector<int>> lmFactorRecord = lmFactorRecordMulti[sym.index()];
-                        Landmark *l = frontEnd->map->getLandmark(sym.index());
-                        VLOG(3) << "lid : " << sym.index() << " Pt: " << l->pt3D;
-                        for (map<int, vector<int>>::iterator itr_l = lmFactorRecord.begin();
-                             itr_l != lmFactorRecord.end(); ++itr_l) {
-                            int iD = (*itr_l).first;
-                            VLOG(3) << "xid : " << l->KFs[iD]->kfID;
-                            vector<int> xids = (*itr_l).second;
-                            for (auto &x: xids) {
-                                VLOG(3) << "comp cam id :" << x;
-                                Mat img;
-
-                                if (!l->KFs[iD]->imgs[x].empty()) {
-                                    cvtColor(l->KFs[iD]->imgs[x], img, COLOR_GRAY2BGR);
-                                    IntraMatch im = l->KFs[iD]->intraMatches[l->featInds[iD]];
-                                    circle(img, l->KFs[iD]->image_kps_undist[x][im.matchIndex[x]].pt, 3,
-                                           Scalar(0, 200, 0), 3);
-                                    // imshow("error lm", img);
-                                    // waitKey(0);
-                                }
-                            }
-
-                        }
-
-                    }
-                    graph.resize(0);
-                    initialEstimate.clear();
-//                currentEstimate = isam.calculateBestEstimate();
-                    currentEstimate = fixedLagOptimizer.calculateEstimate();
-                    VLOG(0) << "Exception caught : " << e.what() << std::endl;
-
-
-                }
-
-            }
-        }
-    }
 
     return true;
 }
@@ -3431,9 +3333,6 @@ void Backend::removeVariables( gtsam::KeyVector tobeRemoved){
 
       }
     else if(optimizationMethod == 1){
-        //Not implemented
-    }
-    else if(optimizationMethod == 2){
         //Not implemented
     }
 }
@@ -3837,7 +3736,7 @@ void Backend::updateVariables() {
     double mean_correction=0.0, max_correction=0.0;
     int num_lms = 0;
     gtsam::KeyVector tobeRemoved;
-    for (gtsam::Values::iterator it = currentEstimate.begin(); it != currentEstimate.end(); ++it) {
+    for (auto it = currentEstimate.begin(); it != currentEstimate.end(); ++it) {
         gtsam::Symbol lid = it->key;
 
         if (lid.chr() == 'l') {

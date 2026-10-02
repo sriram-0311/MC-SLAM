@@ -110,7 +110,7 @@ public:
     CameraRig cameraRig;
     int imgCols, imgRows;
     std::vector<cv::Mat> posesFromMap;
-    boost::shared_ptr<gtsam::CameraSet<PinholePose<Cal3_S2>>> multi_cam_rig;
+    std::shared_ptr<gtsam::CameraSet<PinholePose<Cal3_S2>>> multi_cam_rig;
 
 private:
 /**

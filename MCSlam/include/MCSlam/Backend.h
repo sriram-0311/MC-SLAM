@@ -5,6 +5,7 @@
 // Each variable in the system (poses and landmarks) must be identified with a unique key.
 // We can either use simple integer keys (1, 2, 3, ...) or symbols (X1, X2, L1).
 // Here we will use Symbols
+#include "MCDataUtils/SensorTypes.h"
 #include <gtsam/inference/Symbol.h>
 
 // We want to use iSAM2 to solve the structure-from-motion problem incrementally, so
@@ -33,7 +34,6 @@
 #include "MCSlam/GtsamFactorHelpers.h"
 
 // gtsam fixed lag smoother variables
-#include <gtsam_unstable/nonlinear/BatchFixedLagSmoother.h>
 
 #ifndef SRC_BACKEND_H
 #define SRC_BACKEND_H
@@ -63,8 +63,6 @@ typedef gtsam::SmartProjectionRigFactor<PinholePose<Cal3_S2>> RigFactor;
 
 
 
-BOOST_CLASS_EXPORT_GUID(gtsam::CombinedImuFactor, "gtsam::CombinedImuFactor");
-BOOST_CLASS_EXPORT(PreintegratedCombinedMeasurements);
 
 
 enum BACKEND_TYPE{
@@ -194,8 +192,6 @@ public:
     gtsam::FactorIndices toBeRemovedFactorIndices;
 
     gtsam::LevenbergMarquardtOptimizer *optimizer;
-    gtsam::BatchFixedLagSmoother fixedLagOptimizer;
-    gtsam::FixedLagSmoother::KeyTimestampMap newTimeStamps;
     gtsam::NonlinearFactorGraph graph;
     gtsam::Values initialEstimate;
     gtsam::Values currentEstimate;
@@ -207,7 +203,7 @@ public:
 
 
     // smart factor variables
-    boost::shared_ptr<gtsam::CameraSet<gtsam::PinholePose<gtsam::Cal3_S2>>> cameraRig;
+    std::shared_ptr<gtsam::CameraSet<gtsam::PinholePose<gtsam::Cal3_S2>>> cameraRig;
     // Smart factor params
     gtsam::SmartProjectionParams smartFactor_params;
     // A map of lids and rigfactor pointers
@@ -245,9 +241,9 @@ public:
     int total_prior_isam_calls = 0;
 
     // gps
-    tuple<double, double, double> processGPS_NED(sensor_msgs::NavSatFix gps_msg);
-    tuple<double, double, double> processGPS_ENU(sensor_msgs::NavSatFix gps_msg);
-    void addGPSFactor(std::deque<sensor_msgs::NavSatFix> &gps_msgs_combined, int current_pose_id );
+    tuple<double, double, double> processGPS_NED(mcslam::GnssFix gps_msg);
+    tuple<double, double, double> processGPS_ENU(mcslam::GnssFix gps_msg);
+    void addGPSFactor(std::deque<mcslam::GnssFix> &gps_msgs_combined, int current_pose_id );
     gtsam::Pose3 E_T_V;
     gtsam::Pose3 Tbg;
     bool added_E_T_V_init_est = false;
