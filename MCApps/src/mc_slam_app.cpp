@@ -50,6 +50,7 @@ DEFINE_string(log_file, "pose_stats.txt", "log_file file path");
 DEFINE_string(traj_file, "Tum_trajectory.txt", "trajectory file file path");
 DEFINE_string(body_traj_file, "", "if set, also write keyframe poses of the body (IMU) frame in TUM format");
 DEFINE_string(timing_file, "", "if set, write per-frame stage timings (CSV)");
+DEFINE_int32(max_frames, 0, "stop after this many frames (0 = whole sequence)");
 DEFINE_bool(headless, false, "run without the Pangolin viewer / keyboard loop (for benchmarks)");
 
 mcslam::FrameTiming g_timing;
@@ -805,6 +806,7 @@ void runHeadless(FrontEnd& frontend, Backend& backend, DatasetReaderBase& dataRe
     while (true) {
         g_timing = mcslam::FrameTiming{};
         const auto start = high_resolution_clock::now();
+        if (FLAGS_max_frames > 0 && frames >= static_cast<size_t>(FLAGS_max_frames)) break;
         if (!updateData(frontend, dataReader)) break;
         const auto loaded = high_resolution_clock::now();
         g_timing.timestamp = frontend.currentFrame->timeStamp;

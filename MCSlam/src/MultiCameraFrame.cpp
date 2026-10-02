@@ -104,9 +104,10 @@ void MultiCameraFrame::setData(vector<Mat> img_set, vector<Mat> segmap_set) {
 
     cv::Size siz = cv::Size(img_set[0].cols, img_set[0].rows);
     for(uint im=0; im<img_set.size(); ++im){
+        // Readers may deliver 8-bit images or floating-point images in [0, 1] (legacy ROS path).
         Mat img = img_set[im].clone();
-        multiply(img, 255, img);
-        img.convertTo(img,CV_8U);
+        if (img.depth() != CV_8U)
+            img.convertTo(img, CV_8U, 255.0);
         Mat img_orig = img;
         if (img.channels() == 3){
             Mat imgGray;

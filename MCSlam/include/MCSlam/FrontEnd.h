@@ -139,9 +139,13 @@ public:
         orb_vocabulary_fbow->readFromFile(fbow_voc_file);
 
         //TODO: Get this from the config file in the future.
+        // The database vocabulary is only needed to relocalize against a prior map.
         database_vocab = new ORBVocabulary();
-        VLOG(0) << "Loading the database vocab ..." << endl;
-        database_vocab->load(customVocFile);
+        if (relocal) {
+            CHECK(!customVocFile.empty()) << "relocalization requires CustomVocabFile";
+            VLOG(0) << "Loading the database vocab ..." << endl;
+            database_vocab->load(customVocFile);
+        }
 
         if(!bVocLoad)
         {

@@ -1743,22 +1743,7 @@ void Backend::process_SmartFactor(MultiCameraFrame* currentFrame, GlobalMap* map
 
             }
             else{
-                // add the
-                if(lm_to_facInds.find(lids->at(i)) == lm_to_facInds.end() ){
-                    VLOG(0)<<"DID not find the factor in lm_to_facInds corresponding to LID: "<<lids->at(i);
-                    VLOG(0)<<"Smart factor for the landmark "<< (smartFactor.find(lids->at(i)) !=smartFactor.end());
-                    VLOG(0)<<"Landmark in the map: "<<map->getLandmark(lids->at(i));
-                    VLOG(0)<<"Size of the map: "<<map->num_lms;
-                }
-//                try {
-                    factorNewAffectedKeys[lm_to_facInds.at(lids->at(i))].insert(gtsam::Symbol('x', currentFrame->kfID));
-//                }
-//                catch (const std::out_of_range& oor) {
-//                    VLOG(0) << "Out of Range error: " << oor.what() << endl;
-//                    VLOG(0) << "Landmark ID: " << lids->at(i) << endl;
-//                    VLOG(0) << "Landmark in the map: " << map->getLandmark(lids->at(i));
-//                    VLOG(0) << "Size of the map: " << map->num_lms;
-//                }
+                markSmartFactorAffected(lids->at(i), gtsam::Symbol('x', currentFrame->kfID));
             }
 
             // Insert smart factor for the current keyframe
@@ -1781,6 +1766,17 @@ void Backend::process_SmartFactor(MultiCameraFrame* currentFrame, GlobalMap* map
     }
 }
 
+
+void Backend::markSmartFactorAffected(int lid, gtsam::Key pose_key) {
+    // A smart factor already inside iSAM2 must be told about a newly observing pose so iSAM2
+    // relinearizes it. A factor created in the batch that hasn't been submitted yet has no
+    // slot in lm_to_facInds; it enters iSAM2 with all of its keys, so there is nothing to do.
+    const auto slot = lm_to_facInds.find(lid);
+    if (slot != lm_to_facInds.end())
+        factorNewAffectedKeys[slot->second].insert(pose_key);
+    else
+        VLOG(2) << "Smart factor for landmark " << lid << " is still pending submission";
+}
 
 void Backend::insertSmartFactorinGraph(int lid, vector<int> compcam_ids, IntraMatch* im, MultiCameraFrame*  currentFrame){
 
@@ -1889,7 +1885,7 @@ void Backend::addLoopClosure(int curr_frame_id){
 
         }
 
-        factorNewAffectedKeys[lm_to_facInds.at(matched_lid)].insert(gtsam::Symbol('x', curr_frame_id));
+        markSmartFactorAffected(matched_lid, gtsam::Symbol('x', curr_frame_id));
     }
 }
 
@@ -3236,6 +3232,12 @@ bool Backend::optimizePosesLandmarks() {
             xFactorRecord.clear();
             currentEstimate.clear();
             toBeRemovedFactorIndices.clear();
+            // Factor slots and smart factors belong to the discarded iSAM2 instance: keeping
+            // them would send stale indices to the new one and stop re-adding known landmarks.
+            smartFactor.clear();
+            lm_to_facInds.clear();
+            newFactor_to_lm.clear();
+            factorNewAffectedKeys.clear();
             graph.resize(0);
             initialEstimate.clear();
             currentEstimate.clear();

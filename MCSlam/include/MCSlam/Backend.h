@@ -157,6 +157,7 @@ public:
     void addIMUFactorRelocalization(int prev_kf, int curr_kf, gtsam::NavState currentState);
     bool GlobalRelocalizedPoseNode();
     void UpdateVariablesRelocalization();
+    void markSmartFactorAffected(int lid, gtsam::Key pose_key);
     void insertSmartFactorinGraph(int lid, vector<int> compcam_ids, IntraMatch* im, MultiCameraFrame*  currentFrame);
     void insert_priors_smartFactor();
     bool insert_prior_condition();
