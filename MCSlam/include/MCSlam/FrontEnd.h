@@ -416,14 +416,6 @@ public:
 
     void compute_overlap();
     //MOno
-    bool initialization_mono(vector<DMatch> &matches_mono);
-    void estimatePose_Mono();
-    void findMatchesMono(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur, int cam_ind, std::vector<DMatch>& matches);
-    void insertKeyFrame_Mono();
-    void normalizeKps(vector<cv::Point2f>& kps, vector<cv::Point2f>& kps_n, Mat& T);
-
-    void DecomposeE(const cv::Mat &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t);
-    void Triangulate(const cv::Point2f &kp1, const cv::Point2f &kp2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D);
     void getDataForGTSAMTriangulation(MultiCameraFrame *lf, int iMatchInd, Cameras &cameras,
                                       gtsam::Point2Vector &measurements, vector<int> &compCamInds,
                                       vector<int> &octaves);
@@ -431,42 +423,18 @@ public:
     double getSceneDepthStats(MultiCameraFrame* kf);
 //    int triangulateNeighbors(std::map<int, MultiCameraFrame*> kfMap,  vector<double>& depthVec);
     int triangulateNeighbors(std::map<int, MultiCameraFrame*>& kfMap, std::map<int, vector<DMatch>>& interMatches, vector<double>& depthVec);
-    int CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Point2f>& kps1,
-                const vector<cv::Point2f>& kps2, vector<bool> &inliers,
-                const cv::Mat &K, vector<cv::Point3f> &P3D, float th2,
-                vector<bool> &good, float &parallax, const cv::Mat &R1, const cv::Mat &t1);
     bool checkTriangulation(vector<Mat>& PJs, vector<Point2f>& kps, cv::Mat& P3D, float &parallax);
-    bool ReconstructF(const vector<cv::Point2f>& kps1, const vector<cv::Point2f>& kps2,
-                      vector<bool> &inliers, cv::Mat &F, cv::Mat &K,float sigma,
-                      cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D,
-                      vector<bool> &vbTriangulated, float minParallax, int minTriangulated);
-    cv::Mat solveF_8point(const vector<cv::Point2f> &kps1, const vector<cv::Point2f> &kps2);
-    void generateRandomIndices(int max_ind, vector<vector<int>>& indices_set, int num_sets);
-    float CheckFundamental(const cv::Mat &F, vector<cv::Point2f>& kps1,
-                           vector<cv::Point2f>& kps2, vector<bool> &inliers, float sigma);
-    void FindFundamentalMatrix(vector<Point2f> kps1, vector<Point2f> kps2, Mat& F, vector<bool> &inliers);
-
-    cv::Mat getPose_Mono();
-    vector<cv::Mat> getAllPoses_Mono();
 
 
     void createFrame(vector<Mat> img_set, vector<Mat> segmap_set, double timeStamp);
-    void computeRefocusedImage();
-    void filterIntraMatches( std::vector<IntraMatch>& matches_map, MultiCameraFrame* currentFrame,
-                             std::vector<IntraMatch>& filtered_intra_matches,
-                             vector<DBoW2::NodeId >& words_, set<DBoW2::NodeId >& filtered_words);
-
-    void bundleAdjustIntraMatches(std::vector<IntraMatch>& tmp_intra_matches);
 
     void obtainLfFeatures( std::vector<IntraMatch>& matches_map, MultiCameraFrame* currentFrame,
                            std::vector<IntraMatch>& filtered_intra_matches,
                            vector<DBoW2::NodeId >& words_, set<DBoW2::NodeId >& filtered_words);
 
     void processFrame();
-    void processFrameNon();
     bool trackFrame();
     bool initialization();
-    bool initialization_non_overlapping(vector<DMatch> &mono_matches);
     void insertKeyFrame();
     void deleteCurrentFrame();
 
@@ -502,7 +470,6 @@ public:
 
 
     cv::Mat getPose();
-    cv::Mat getPose_seventeen();
     cv::Mat getPose_gp3p();  //Relative pose
     vector<cv::Mat> getAllPoses_gp3p();
     vector<cv::Mat> getAllPoses();
@@ -512,28 +479,13 @@ public:
     void getMapPoints(vector<Point3f>& mapPoints); // for dummy frames added using gps + imu
 
     void reset();
-    void drawMatchesArrows(cv::Mat& img, vector<KeyPoint>& kps_prev, vector<KeyPoint>& kps_cur,  std::vector<DMatch> matches, Mat mask, cv::Scalar color);
-    void drawInterMatches(MultiCameraFrame *lf_prev, MultiCameraFrame *lf_cur, vector<DMatch> matches,
-                          vector<bool> inliers, string windowTitle);
-    void drawInterMatch(MultiCameraFrame *lf_prev, MultiCameraFrame *lf_cur, IntraMatch im1,IntraMatch im2, string windowTitle);
-    void check_tri_sp(int num_views, vector<int> view_inds, IntraMatch& matches,  MultiCameraFrame* lf);
 
     void writeTrajectoryToFile(const string &filename,  bool mono);
-
-
-    void drawInterMatch(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur, int prev_ind, int cur_ind);
-    void prepareOpengvData(vector<Point2f>& kps_1, vector<Point2f>& kps_2, int cam1, int cam2);
-    void tracksForHist();
 //    void searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
 //                        vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors);
     void searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
                         vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors, std::map<int, vector<DMatch>>& interMatches);
-    void searchLocalMap(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
-                        vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids);
-    void writeLogs( string stats_file);
     void project3dPoint(const Mat &pt3d, int camInd,Mat Twb, double& exp_x, double& exp_y);
-
-    std::string matToString(const cv::Mat& mat);
 
 
     /**
@@ -599,8 +551,6 @@ public:
 
     bool startTrackingModule(gtsam::NavState state);
     void refinePose();
-
-    bool visionTrackingModule();
 
 
     //only for mono-comparison
@@ -812,7 +762,6 @@ public:
     //for dummy kfs
     void insertKeyFrame(gtsam::NavState prevState_, gtsam::imuBias::ConstantBias prevBias_, double timestamp);
     MultiCameraFrame* currentFrameDummy;
-    void deleteCurrentDummyFrame();
     void appendGPSValue(gps_message gps_data, int gps_kf);
 
 
