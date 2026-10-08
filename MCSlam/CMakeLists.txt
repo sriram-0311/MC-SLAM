@@ -10,6 +10,7 @@ set(MCSLAM_SOURCES
   src/relocalization.cpp
   src/time_measurement.cpp
   src/Triangulation.cpp
+  src/VisualInertialAlignment.cpp
   src/Tracking.cpp
 )
 if(MCSLAM_WITH_VIEWER)
