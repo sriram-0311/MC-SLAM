@@ -74,6 +74,9 @@ public:
      */
     DorianLoopDetector::Parameters dloop_param;
 
+    // false: seed the geometric-verification RANSAC with a fixed value (reproducible runs)
+    bool ransac_random_seed = true;
+
     /**
      * Multi-Camera Parameters.
      */

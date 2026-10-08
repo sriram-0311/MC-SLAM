@@ -275,20 +275,15 @@ bool LoopCloser::checkAbsolutePose(const DBoW2::EntryId &old_Id, std::vector<cv:
     m_inliers.clear();
     m_inliers = std::vector<bool>(matches.size(), false);
     points_t points;
-    for (auto &m : matches)
+    // RANSAC indexes the compacted points/bearings; this maps each point back to its match.
+    std::vector<size_t> point_to_match;
+    for (size_t mi = 0; mi < matches.size(); mi++)
     {
-        cv::Mat pt3d;
+        const cv::DMatch &m = matches[mi];
         int l_id = key_frames[(int)old_Id]->lIds[m.queryIdx];
         if(l_id == -1)
             continue;
-        pt3d = m_map->getLandmark(l_id)->pt3D;
-        Eigen::Vector3d pt;
-        for(int j = 0; j < 3; j++)
-        {
-            pt[j] = pt3d.at<double>(j,0);
-        }
-        points.push_back(pt);
-        IntraMatch intra_curr = m_frame->intraMatches[m.trainIdx];
+        const IntraMatch &intra_curr = m_frame->intraMatches[m.trainIdx];
         for(int i = 0; i < m_frame->num_cams_; i++)
         {
             if(intra_curr.matchIndex[i] != -1)
@@ -302,10 +297,12 @@ bool LoopCloser::checkAbsolutePose(const DBoW2::EntryId &old_Id, std::vector<cv:
                 pt_n[2] = 1.0;
                 m_br1.emplace_back(pt_n/pt_n.norm());
                 m_camCorrespondences1.emplace_back(i);
+                const cv::Mat &pt3d = m_map->getLandmark(l_id)->pt3D;
+                points.emplace_back(pt3d.at<double>(0), pt3d.at<double>(1), pt3d.at<double>(2));
+                point_to_match.push_back(mi);
                 break;
             }
         }
-
     }
 
     assert(m_camCorrespondences1.size() == points.size());
@@ -316,7 +313,7 @@ bool LoopCloser::checkAbsolutePose(const DBoW2::EntryId &old_Id, std::vector<cv:
     opengv::sac::Ransac<opengv::sac_problems::absolute_pose::AbsolutePoseSacProblem> ransac;
     ransac.sac_model_ = std::make_shared<sac_problems::absolute_pose::AbsolutePoseSacProblem>(
             adapter,
-            sac_problems::absolute_pose::AbsolutePoseSacProblem::GP3P);
+            sac_problems::absolute_pose::AbsolutePoseSacProblem::GP3P, ransac_random_seed);
     ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/K_mat[0].at<double>(0,2)));
     ransac.max_iterations_ = 100;   // TODO: Add this parameter to the config file.
     ransac.computeModel();
@@ -330,7 +327,7 @@ bool LoopCloser::checkAbsolutePose(const DBoW2::EntryId &old_Id, std::vector<cv:
     {
         for(size_t i = 0; i < ransac.inliers_.size(); i++)
         {
-            m_inliers[ransac.inliers_[i]] = true;
+            m_inliers[point_to_match[ransac.inliers_[i]]] = true;
         }
         VLOG(0) << "Loop closure candidate verified!" << std::endl;
         // TODO: Convert the pose to the body frame when IMU added.
@@ -404,7 +401,8 @@ bool LoopCloser::checkEssentialMatrix(const EntryId& old_Id, std::vector<cv::DMa
         opengv::sac::Ransac<sac_problems::relative_pose::NoncentralRelativePoseSacProblem> ransac;
         ransac.sac_model_ = std::make_shared<sac_problems::relative_pose::NoncentralRelativePoseSacProblem>(
                 adapter,
-                sac_problems::relative_pose::NoncentralRelativePoseSacProblem::SEVENTEENPT
+                sac_problems::relative_pose::NoncentralRelativePoseSacProblem::SEVENTEENPT,
+                false, ransac_random_seed
         );
         ransac.threshold_ = 2.0 * (1.0 - cos(atan(sqrt(2.0) * 0.5 / K_mat[0].at<double>(0, 2))));
         ransac.max_iterations_ = 2000; // TODO: Reduce the number of iterations as this is making the Loop closure functionality slower. Add this as a parm in config file.
@@ -500,9 +498,9 @@ void LoopCloser::getLIds(std::vector<cv::DMatch> &matches, const DBoW2::EntryId 
 {
     matched_Lid.clear();
     matched_measurement.clear();
-    int pp = 0;
-    for (auto& m : matches)
+    for (size_t pp = 0; pp < matches.size(); pp++)
     {
+        const cv::DMatch &m = matches[pp];
         if(m_inliers[pp])
         {
             // Lids of the previous images.
@@ -525,7 +523,6 @@ void LoopCloser::getLIds(std::vector<cv::DMatch> &matches, const DBoW2::EntryId 
             }
             matched_measurement.emplace_back(measurement);
         }
-        pp++;
     }
     assert(matched_Lid.size() == matched_measurement.size());
 }
