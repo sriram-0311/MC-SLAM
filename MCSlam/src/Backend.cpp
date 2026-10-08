@@ -70,6 +70,20 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
 
     huberModel = noiseModel::Robust::Create(noiseModel::mEstimator::Huber::Create(
             sqrt(5.991)), measurementNoise);
+    if (!fSettings["SmartFactorPixelSigma"].empty())
+        smart_pixel_sigma_ = (double)fSettings["SmartFactorPixelSigma"];
+    if (!fSettings["OdometrySigmaRot"].empty())
+        odom_sigma_rot_ = (double)fSettings["OdometrySigmaRot"];
+    if (!fSettings["OdometrySigmaTrans"].empty())
+        odom_sigma_trans_ = (double)fSettings["OdometrySigmaTrans"];
+    if (!fSettings["SmartFactorOutlierPx"].empty())
+        smart_outlier_px_ = (double)fSettings["SmartFactorOutlierPx"];
+    if (!fSettings["SmartFactorMaxDistance"].empty())
+        smart_max_distance_ = (double)fSettings["SmartFactorMaxDistance"];
+    if (!fSettings["ReinitSigmaRot"].empty())
+        reinit_sigma_rot_ = (double)fSettings["ReinitSigmaRot"];
+    if (!fSettings["ReinitSigmaTrans"].empty())
+        reinit_sigma_trans_ = (double)fSettings["ReinitSigmaTrans"];
 
     optimizationMethod = (int)fSettings["Optimization"];
 //    optimizationMethod = 1;
@@ -78,6 +92,8 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
         //parameters.optimizationParams = ISAM2DoglegParams(1.0, 1e-5, DoglegOptimizerImpl::SEARCH_EACH_ITERATION);
         parameters.relinearizeThreshold = (double)fSettings["ISAMRelinearizeThreshold"];
         parameters.relinearizeSkip = (int)fSettings["ISAMRelinearizeSkip"];
+        // CHOLESKY: the rig smart factors only linearize to (semi-definite) Hessian factors, which
+        // QR cannot eliminate without failing on their rank deficiency
         parameters.factorization = gtsam::ISAM2Params::CHOLESKY;
         isam = gtsam::ISAM2(parameters);
     }
@@ -124,6 +140,12 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
     // set Smart factor params
     smartFactor_params.linearizationMode = gtsam::HESSIAN;
     smartFactor_params.degeneracyMode = gtsam::ZERO_ON_DEGENERACY;
+    // A landmark whose triangulation reprojects worse than this (mean, px) or lies further away than
+    // this (m) is treated as degenerate and contributes nothing, instead of pulling on the poses.
+    if (smart_outlier_px_ > 0)
+        smartFactor_params.setDynamicOutlierRejectionThreshold(smart_outlier_px_);
+    if (smart_max_distance_ > 0)
+        smartFactor_params.setLandmarkDistanceThreshold(smart_max_distance_);
 
     // A map of lids and rigfactor pointers
     std::map<int, RigFactor::shared_ptr> smartFactor;
@@ -1605,10 +1627,6 @@ void Backend::addKeyframeGPS(bool addimufactor){
 
     //create a dummy kf without landmarks but with gps and imu messages when we are using gps and imu
     //this is to ensure that the gps factors are added to the graph at the right time, accounting for the time offset
-    if (initialEstimate.empty()) {
-        factorNewAffectedKeys.clear();
-        newFactor_to_lm.clear();
-    }
 
     int currKFID = frontEnd->currentKFID;
     int prevKFID = frontEnd->lfFrames.back()->kfID;
@@ -1652,10 +1670,10 @@ void Backend::insert_priors_smartFactor(){
     VLOG(0) <<"Inserting priors for the first time"<<endl;
 
 
-    // After initialization we will have 2 KFs. Add priors for the first KF
-    assert(frontEnd->lfFrames.size() == 2);
-    // 1. add prior for the first KF
-    MultiCameraFrame* first_MCFrame = frontEnd->lfFrames[0];
+    // At start-up there are 2 KFs and the prior goes on the first. After an iSAM2 reset the graph
+    // restarts from the keyframe before the current one, anchored at its last estimate.
+    assert(frontEnd->lfFrames.size() >= 2);
+    MultiCameraFrame* first_MCFrame = frontEnd->lfFrames[frontEnd->lfFrames.size() - 2];
     int firstKFID = first_MCFrame->kfID;
     prev_Kf = firstKFID;
 
@@ -1703,11 +1721,6 @@ void Backend::insert_priors_smartFactor(){
 
 void Backend::process_SmartFactor(MultiCameraFrame* currentFrame, GlobalMap* map){
 
-    //Reset the factorNewAffectedKeys map for each new keyframe
-    if (initialEstimate.empty()) {
-        factorNewAffectedKeys.clear();
-        newFactor_to_lm.clear();
-    }
 
     std::vector<IntraMatch> *intramatches = &currentFrame->intraMatches;
     vector<int> *lids = &currentFrame->lIds;
@@ -1726,21 +1739,21 @@ void Backend::process_SmartFactor(MultiCameraFrame* currentFrame, GlobalMap* map
             vector<MultiCameraFrame*> landmark_kfs = l->KFs;
             // if a smart factor does not exist, it is a new landmark so add prior
             if(smartFactor.count(lids->at(i)) == 0) {
-
-                assert(landmark_kfs.size() == 2); // make sure that this is a new landmark which is just created
-
-                vector<int> compcam_ids;
-                IntraMatch *im = &landmark_kfs[0]->intraMatches[l->featInds[0]];
-
-                for (int cam_id = 0; cam_id < landmark_kfs[0]->num_cams_; cam_id++) {
-                    int kp_ind = im->matchIndex[cam_id];
-                    if (kp_ind != -1) {
-                        compcam_ids.push_back(cam_id);
+                // Usually a landmark just created from the current and one older keyframe. After an
+                // iSAM2 reset it can be an older landmark: only keyframes still in the graph may be
+                // referenced, otherwise iSAM2 gets a factor on a key it has no value for.
+                for (size_t k = 0; k + 1 < landmark_kfs.size(); k++) {
+                    MultiCameraFrame* kf = landmark_kfs[k];
+                    if (kf->kfID == currentFrame->kfID || !poseInGraph(kf->kfID))
+                        continue;
+                    vector<int> compcam_ids;
+                    IntraMatch *im = &kf->intraMatches[l->featInds[k]];
+                    for (int cam_id = 0; cam_id < kf->num_cams_; cam_id++) {
+                        if (im->matchIndex[cam_id] != -1)
+                            compcam_ids.push_back(cam_id);
                     }
+                    insertSmartFactorinGraph(lids->at(i), compcam_ids, im, kf);
                 }
-
-                insertSmartFactorinGraph(lids->at(i), compcam_ids, im, landmark_kfs[0]);
-
             }
             else{
                 markSmartFactorAffected(lids->at(i), gtsam::Symbol('x', currentFrame->kfID));
@@ -1767,6 +1780,54 @@ void Backend::process_SmartFactor(MultiCameraFrame* currentFrame, GlobalMap* map
 }
 
 
+bool Backend::poseInGraph(int kfID) const {
+    const gtsam::Key key = gtsam::Symbol('x', kfID);
+    return currentEstimate.exists(key) || initialEstimate.exists(key);
+}
+
+void Backend::addOdometryFactor(MultiCameraFrame* prevKF, MultiCameraFrame* curKF) {
+    if (odom_sigma_rot_ <= 0 || odom_sigma_trans_ <= 0 || prevKF == nullptr)
+        return;
+    if (!poseInGraph(prevKF->kfID)) {
+        VLOG(0) << "Odometry factor skipped: x" << prevKF->kfID << " is not in the graph";
+        return;
+    }
+    cv::Mat prev_pose = prevKF->pose * frontEnd->Tbc_cv.inv();
+    cv::Mat cur_pose = curKF->pose * frontEnd->Tbc_cv.inv();
+    const gtsam::Pose3 w_T_prev = convertPose3_CV2GTSAM(prev_pose);
+    const gtsam::Pose3 w_T_cur = convertPose3_CV2GTSAM(cur_pose);
+    auto noise = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << gtsam::Vector3::Constant(odom_sigma_rot_),
+            gtsam::Vector3::Constant(odom_sigma_trans_)).finished());
+    graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(gtsam::Symbol('x', prevKF->kfID),
+            gtsam::Symbol('x', curKF->kfID), w_T_prev.between(w_T_cur), noise);
+}
+
+void Backend::bridgeReinitializedKeyframe(MultiCameraFrame* kf) {
+    if (kf == nullptr || poseInGraph(kf->kfID))
+        return;
+    // the most recent earlier keyframe that is in the graph
+    MultiCameraFrame* anchor = nullptr;
+    for (int i = static_cast<int>(frontEnd->lfFrames.size()) - 1; i >= 0; --i) {
+        MultiCameraFrame* f = frontEnd->lfFrames[i];
+        if (f->kfID < kf->kfID && !f->dummy_kf && poseInGraph(f->kfID)) {
+            anchor = f;
+            break;
+        }
+    }
+    if (anchor == nullptr)
+        return;
+    cv::Mat anchor_pose = anchor->pose * frontEnd->Tbc_cv.inv();
+    cv::Mat kf_pose = kf->pose * frontEnd->Tbc_cv.inv();
+    const gtsam::Pose3 w_T_anchor = convertPose3_CV2GTSAM(anchor_pose);
+    const gtsam::Pose3 w_T_kf = convertPose3_CV2GTSAM(kf_pose);
+    initialEstimate.insert(gtsam::Symbol('x', kf->kfID), w_T_kf);
+    auto noise = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << gtsam::Vector3::Constant(reinit_sigma_rot_),
+            gtsam::Vector3::Constant(reinit_sigma_trans_)).finished());
+    graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(gtsam::Symbol('x', anchor->kfID),
+            gtsam::Symbol('x', kf->kfID), w_T_anchor.between(w_T_kf), noise);
+    VLOG(0) << "Bridged re-initialization keyframe x" << kf->kfID << " to x" << anchor->kfID;
+}
+
 void Backend::markSmartFactorAffected(int lid, gtsam::Key pose_key) {
     // A smart factor already inside iSAM2 must be told about a newly observing pose so iSAM2
     // relinearizes it. A factor created in the batch that hasn't been submitted yet has no
@@ -1780,8 +1841,7 @@ void Backend::markSmartFactorAffected(int lid, gtsam::Key pose_key) {
 
 void Backend::insertSmartFactorinGraph(int lid, vector<int> compcam_ids, IntraMatch* im, MultiCameraFrame*  currentFrame){
 
-    int pixel_noise = 15.0;
-    gtsam::SharedIsotropic  measurementNoise = gtsam::noiseModel::Isotropic::Sigma(2, pixel_noise);
+    gtsam::SharedIsotropic  measurementNoise = gtsam::noiseModel::Isotropic::Sigma(2, smart_pixel_sigma_);
     int kf_id = currentFrame->kfID;
     if(smartFactor.count(lid) == 0) {
 
@@ -2012,6 +2072,11 @@ bool Backend::SmartFactor_backend(bool loop_closed){
     // 3. add smart factors
     // browse through all the intramatches and add smart factors
 
+    // After a stereo-only re-initialization the keyframe it started from has not been sent to the
+    // back end; link it to the graph before the current keyframe's factors reference it.
+    if(!frontEnd->useIMU && frontEnd->lfFrames.size() >= 2)
+        bridgeReinitializedKeyframe(frontEnd->lfFrames[frontEnd->lfFrames.size() - 2]);
+
     auto start_time = std::chrono::high_resolution_clock::now();
     process_SmartFactor(frontEnd->lfFrames.back(), map);
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -2020,6 +2085,8 @@ bool Backend::SmartFactor_backend(bool loop_closed){
 
 
     addPosetoInitialEstimate(frontEnd->lfFrames.back());
+    if(!frontEnd->useIMU && frontEnd->lfFrames.size() >= 2)
+        addOdometryFactor(frontEnd->lfFrames[frontEnd->lfFrames.size() - 2], frontEnd->lfFrames.back());
 
 //    graph.print("Factor Graph after adding smart factors: \n");
 //    initialEstimate.print("Initial Estimate after adding smart factors: \n");
@@ -3042,6 +3109,30 @@ bool Backend::addKeyFrameNov(){
 
 
 
+void Backend::resetGraph() {
+    isam.clear();
+    lmFactorRecordMulti.clear();
+    xFactorRecord.clear();
+    toBeRemovedFactorIndices.clear();
+    // Factor slots and smart factors belong to the discarded iSAM2 instance: keeping
+    // them would send stale indices to the new one and stop re-adding known landmarks.
+    smartFactor.clear();
+    lm_to_facInds.clear();
+    newFactor_to_lm.clear();
+    factorNewAffectedKeys.clear();
+    graph.resize(0);
+    initialEstimate.clear();
+    currentEstimate.clear();
+
+    isam = gtsam::ISAM2(parameters);
+    reinitialized_ = true;
+    last_reset_kfid = frontEnd->currentFrame->kfID;
+    windowCounter=0;
+    debug_prior = true;
+    added_E_T_V_init_est  = false;
+    gps_factor_count=0;
+}
+
 bool Backend::optimizePosesLandmarks() {
     if(optimizationMethod == 0){
         ISAM2 isam2 = ISAM2(isam);
@@ -3103,6 +3194,9 @@ bool Backend::optimizePosesLandmarks() {
             // this will come in handy when we want to refer to them later
             for (const auto &f2l : newFactor_to_lm)
                 lm_to_facInds[f2l.second] = result.newFactorsIndices.at(f2l.first);
+            // consumed by this update; the next batch starts from an empty graph
+            newFactor_to_lm.clear();
+            factorNewAffectedKeys.clear();
 
 
 //            for(auto& lid : deleted_landmarks){
@@ -3227,28 +3321,7 @@ bool Backend::optimizePosesLandmarks() {
             VLOG(0) << "current isam ILS errors = " << total_isam_errors << endl;
 
 
-            isam.clear();
-            lmFactorRecordMulti.clear();
-            xFactorRecord.clear();
-            currentEstimate.clear();
-            toBeRemovedFactorIndices.clear();
-            // Factor slots and smart factors belong to the discarded iSAM2 instance: keeping
-            // them would send stale indices to the new one and stop re-adding known landmarks.
-            smartFactor.clear();
-            lm_to_facInds.clear();
-            newFactor_to_lm.clear();
-            factorNewAffectedKeys.clear();
-            graph.resize(0);
-            initialEstimate.clear();
-            currentEstimate.clear();
-
-            isam = gtsam::ISAM2(parameters);
-            reinitialized_ = true;
-            last_reset_kfid = frontEnd->currentFrame->kfID;
-            windowCounter=0;
-            debug_prior = true;
-            added_E_T_V_init_est  = false;
-            gps_factor_count=0;
+            resetGraph();
             VLOG(0) << "Exception caught : " << e.what() << std::endl;
             VLOG(0)<<"Resetting ISAM";
             return false;
@@ -3500,7 +3573,12 @@ void Backend::UpdateVariables_SmartFactors(){
             }
 //        VLOG(0) << " landmark " << deleted_landmarks[iter->first] << " has not been deleted ";
             // get the camera
-            auto cameras = smartFactor[lid]->cameras(currentEstimate);
+            // no smart factor yet (still pending, or dropped by an iSAM2 reset): nothing to re-triangulate
+            const auto sf_it = smartFactor.find(lid);
+            if (sf_it == smartFactor.end() || !sf_it->second)
+                continue;
+            const RigFactor::shared_ptr& sf = sf_it->second;
+            auto cameras = sf->cameras(currentEstimate);
 
             // check if atleast 2 cameras have seen. it should  be atleast 2 but just in case check
             if(cameras.size() < 2){
@@ -3509,8 +3587,8 @@ void Backend::UpdateVariables_SmartFactors(){
             }
 
             // get the landmark
-            auto measurements = smartFactor[lid]->measured();
-            TriangulationResult triangulate_check = smartFactor[lid]->triangulateSafe(cameras);
+            auto measurements = sf->measured();
+            TriangulationResult triangulate_check = sf->triangulateSafe(cameras);
             if(triangulate_check.valid()){
 
                 gtsam::Point3 landmark = gtsam::triangulatePoint3(cameras, measurements);

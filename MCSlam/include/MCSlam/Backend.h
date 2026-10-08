@@ -141,6 +141,8 @@ public:
     void addLoopClosureFactor();
 
     bool optimizePosesLandmarks();
+    /// Discards the iSAM2 instance and every bookkeeping structure tied to it.
+    void resetGraph();
 
     void removeVariables( gtsam::KeyVector tobeRemoved);
     void updateVariables();
@@ -158,6 +160,12 @@ public:
     bool GlobalRelocalizedPoseNode();
     void UpdateVariablesRelocalization();
     void markSmartFactorAffected(int lid, gtsam::Key pose_key);
+    // true if the pose of this keyframe is in iSAM2 or waiting in the pending initial estimate
+    bool poseInGraph(int kfID) const;
+    // vision-only: weak between factor from the front-end relative pose of the last two keyframes
+    void addOdometryFactor(MultiCameraFrame* prevKF, MultiCameraFrame* curKF);
+    // vision-only: bring a re-initialization keyframe that never entered the graph into it
+    void bridgeReinitializedKeyframe(MultiCameraFrame* kf);
     void insertSmartFactorinGraph(int lid, vector<int> compcam_ids, IntraMatch* im, MultiCameraFrame*  currentFrame);
     void insert_priors_smartFactor();
     bool insert_prior_condition();
@@ -174,6 +182,15 @@ public:
     CamArrayConfig* camArrayConfig;
     bool reinitialized_;
     int last_reset_kfid=0;
+    // Smart factor pixel sigma (legacy value 15 px) and the vision-only odometry factor sigmas
+    // (<= 0 disables the factor). Read from the back-end yaml when present.
+    double smart_pixel_sigma_ = 15.0;
+    double odom_sigma_rot_ = -1.0, odom_sigma_trans_ = -1.0;
+    // Smart factor degeneracy/outlier guards (GTSAM TriangulationParameters; <= 0 disables)
+    double smart_outlier_px_ = -1.0, smart_max_distance_ = -1.0;
+    // Loose link from the last keyframe in the graph to the keyframe a stereo-only re-initialization
+    // started from (motion during the tracking loss is unknown)
+    double reinit_sigma_rot_ = 0.2, reinit_sigma_trans_ = 0.5;
 
     FrontEnd* frontEnd;
     string backend_config_file;

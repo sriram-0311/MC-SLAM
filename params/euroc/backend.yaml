@@ -4,8 +4,21 @@
 # Reference camera of the rig
 CamID: 0
 
-# Pixel noise of a keypoint measurement (Huber-robustified)
+# Pixel noise of a keypoint measurement in the (Huber-robustified) projection-factor back ends
 MeasurementNoiseSigma: 1.0
+
+# Smart-factor back end (SmartProjectionRigFactor). Pixel sigma of an undistorted keypoint; a landmark
+# whose triangulation has mean reprojection error above SmartFactorOutlierPx, or lies further than
+# SmartFactorMaxDistance (m, near-degenerate for the 11 cm stereo baseline), is dropped as degenerate.
+SmartFactorPixelSigma: 1.0
+SmartFactorOutlierPx: 5.0
+SmartFactorMaxDistance: 20.0
+
+# Stereo only: loose link (rad, m) from the last keyframe in the graph to the keyframe vision
+# re-initialized at after a tracking loss. A weak frame-to-frame odometry factor
+# (OdometrySigmaRot/OdometrySigmaTrans) is also available but off: it did not help on EuRoC.
+ReinitSigmaRot: 0.2
+ReinitSigmaTrans: 0.5
 
 # 0: iSAM2 (incremental), 1: Levenberg-Marquardt (batch)
 Optimization: 0
