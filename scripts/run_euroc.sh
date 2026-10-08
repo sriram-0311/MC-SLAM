@@ -8,6 +8,10 @@
 #   VOCAB_DIR  [~/datasets/vocab]   ORBvoc.txt and orb_mur.fbow
 #   BUILD_DIR  [<repo>/build]
 #   EVO_BIN    [~/.local/share/mcslam-venv/bin]
+#   KF_ROT_DEG [5]                  keyframe rotation threshold (deg), tuning knob
+#   RANSAC_PX  [0.88]               tracking RANSAC threshold (px), tuning knob
+#   BACKEND_PARAMS [params/euroc/backend.yaml]  alternative back-end yaml (copied into out_dir)
+#   IMU        [0]                  1 = stereo+IMU (needs a VI initializer; not yet working on EuRoC)
 set -euo pipefail
 
 SEQ=${1:?usage: run_euroc.sh <SEQ> [out_dir] [flags...]}
@@ -19,6 +23,10 @@ EUROC_DIR=${EUROC_DIR:-$HOME/datasets/euroc}
 VOCAB_DIR=${VOCAB_DIR:-$HOME/datasets/vocab}
 BUILD_DIR=${BUILD_DIR:-$REPO/build}
 EVO_BIN=${EVO_BIN:-$HOME/.local/share/mcslam-venv/bin}
+IMU=${IMU:-0}
+KF_ROT_DEG=${KF_ROT_DEG:-5}
+RANSAC_PX=${RANSAC_PX:-0.88}
+BACKEND_PARAMS=${BACKEND_PARAMS:-}
 PARAMS=$REPO/params/euroc
 SEQ_DIR=$EUROC_DIR/$SEQ
 
@@ -28,9 +36,14 @@ OUT=$(cd "$OUT" && pwd)
 
 render() {
   sed -e "s|@SEQ_DIR@|$SEQ_DIR|g" -e "s|@OUT_DIR@|$OUT|g" \
-      -e "s|@PARAMS_DIR@|$PARAMS|g" -e "s|@VOCAB_DIR@|$VOCAB_DIR|g" "$1" > "$2"
+      -e "s|@PARAMS_DIR@|$PARAMS|g" -e "s|@VOCAB_DIR@|$VOCAB_DIR|g" \
+      -e "s|^imu=.*|imu=$IMU|" -e "s|@KF_ROT_DEG@|$KF_ROT_DEG|g" -e "s|@RANSAC_PX@|$RANSAC_PX|g" "$1" > "$2"
 }
 render "$PARAMS/euroc_stereo_imu.cfg.in" "$OUT/run.cfg"
+if [[ -n $BACKEND_PARAMS ]]; then
+  cp "$BACKEND_PARAMS" "$OUT/backend.yaml"
+  sed -i "s|^backend_params_file=.*|backend_params_file=$OUT/backend.yaml|" "$OUT/run.cfg"
+fi
 render "$PARAMS/frontend.yaml.in" "$OUT/frontend.yaml"
 
 echo "[$SEQ] running -> $OUT"
@@ -49,12 +62,4 @@ if [[ $status -ne 0 ]]; then
   exit "$status"
 fi
 
-GT=$SEQ_DIR/gt_tum.txt
-if [[ -s $OUT/traj_body.txt && -f $GT ]]; then
-  # Stereo-inertial: metric scale is observable, so align with SE(3) only (no scale correction).
-  "$EVO_BIN/evo_ape" tum "$GT" "$OUT/traj_body.txt" --align --t_max_diff 0.02 \
-      --save_results "$OUT/ape.zip" > "$OUT/ape.txt" 2>&1 || true
-  "$EVO_BIN/evo_rpe" tum "$GT" "$OUT/traj_body.txt" --align --delta 1 --delta_unit m \
-      --t_max_diff 0.02 --save_results "$OUT/rpe.zip" > "$OUT/rpe.txt" 2>&1 || true
-  echo "[$SEQ] ATE: $(grep -E '^\s+rmse' "$OUT/ape.txt" | awk '{print $2}') m"
-fi
+"$REPO/scripts/eval_euroc.sh" "$SEQ" "$OUT"

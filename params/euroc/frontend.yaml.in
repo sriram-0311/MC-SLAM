@@ -24,9 +24,12 @@ PoseEstimation: 2
 # 0: brute force, 1: bag-of-words
 InterMatch: 1
 
-# Keyframe insertion: baseline [m] or rotation [rad] since last keyframe
+# Keyframe insertion: baseline [m] or rotation [deg] since last keyframe
 KFBaselineThresholdTranslation: 0.15
-KFBaselineThresholdRotation: 0.15
+KFBaselineThresholdRotation: @KF_ROT_DEG@
+
+# Tracking RANSAC reprojection threshold [px]; remove to use the legacy ~0.9 px
+Tracking.RansacThresholdPx: @RANSAC_PX@
 
 Viewer.CameraSize: 0.08
 Viewer.CameraLineWidth: 2
