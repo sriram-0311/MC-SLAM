@@ -2,6 +2,7 @@
 // Created by Pushyami Kaveti on 6/6/20.
 //
 #include "MCSlam/FrontEnd.h"
+#include <unordered_set>
 #include "MCSlam/LoopCloser.h"
 #include <DUtils/DUtils.h>
 
@@ -16,12 +17,10 @@
 #include "MCSlam/Triangulation.h"
 
 
-
 using namespace std;
 using namespace cv;
 using namespace std::chrono;
 using namespace boost::assign;
-//using namespace opengv;
 
 // todo: Normalized coordinates for keypoints
 // todo: Intramatch class instead of independent vectors
@@ -31,13 +30,10 @@ using namespace boost::assign;
 void FrontEnd::createFrame(vector<Mat> img_set, vector<Mat> segmap_set, double timeStamp){
     currentFrame = new MultiCameraFrame(img_set, segmap_set, orb_vocabulary, orBextractor, orBextractors, camconfig_, current_frameId++,
                                         timeStamp, clahe, false);
-//    std::unique_ptr<MultiCameraFrame> currentFrame(new MultiCameraFrame(img_set, segmap_set, orb_vocabulary, orBextractor, orBextractors, camconfig_, current_frameId++,
-//                                                                        timeStamp, clahe, false));
     ///compute overlapping regions
     if(current_frameId == 1)
         compute_overlap();
 
-    //lfFrames.push_back(frame);
 }
 
 void FrontEnd::compute_overlap() {
@@ -48,7 +44,6 @@ void FrontEnd::compute_overlap() {
     int numBlocks_ = grid_rows * grid_cols;
 
     std::vector<Point2f> imgGrid[grid_cols][grid_rows];
-    //int imgGrid[grid_cols][grid_rows];
 
     overlap_masks.reserve(5);
 
@@ -82,11 +77,6 @@ void FrontEnd::compute_overlap() {
             ///////Visualization
             // draw epiolar lines
             Mat outImg = Mat::zeros(camconfig_.im_size_.height, camconfig_.im_size_.width * 2, CV_8UC3);;
-            //outImg.create(camconfig_.im_size_.height, camconfig_.im_size_.width * 2, CV_8UC1);
-            //currentFrame->imgs[c].copyTo(outImg(cv::Range(0, camconfig_.im_size_.height), cv::Range(0, camconfig_.im_size_.width)));
-            //currentFrame->imgs[c2].copyTo(outImg(cv::Range(0, camconfig_.im_size_.height), cv::Range(camconfig_.im_size_.width, camconfig_.im_size_.width * 2)));
-            //cvtColor(outImg,outImg , COLOR_GRAY2BGR);
-            ///////////////////
             for (unsigned int i = 0; i < grid_cols; i++){
 
                 for (unsigned int j = 0; j < grid_rows; j++) {
@@ -118,9 +108,7 @@ void FrontEnd::compute_overlap() {
                     }
 
 
-                    //imgGrid[i][j].reserve(5);
                     //find the grids in c2 that overlap with c1.
-                    // Epipolar line in image c2 = F * kp1
                     float a = grid_center_x * F.at<double>(0,0)+grid_center_y*F.at<double>(0,1)+F.at<double>(0,2);
                     float b = grid_center_x * F.at<double>(1,0)+grid_center_y*F.at<double>(1,1)+F.at<double>(1,2);
                     float c = grid_center_x * F.at<double>(2,0)+grid_center_y*F.at<double>(2,1)+F.at<double>(2,2);
@@ -144,24 +132,9 @@ void FrontEnd::compute_overlap() {
                         int c2_grid_cell_y = floor(c2_grid_center_y / cell_size_y);
                         double c2_actual_grid_center_y = cell_size_y * c2_grid_cell_y + (cell_size_y/2.0);
 
-//                        if(c2_grid_center_y < camconfig_.im_size_.height and c2_grid_center_y > 10){
-//                            cv::circle(outImg,Point2f(c2_grid_center_x,c2_grid_center_y) + Point2f(camconfig_.im_size_.width , 0), 5, color_, 2);
-//                            cv::circle(outImg,Point2f(c2_grid_center_x,c2_actual_grid_center_y) + Point2f(camconfig_.im_size_.width , 0), 5, Scalar(255,25,255), 1);
-//                        }
 
                     }
-                    //imgGrid[i][j].push_back(Point2f(grid_col_c, grid_row_c));
 
-//                    // draw the epipolar line for grids in other camera
-//                    int x0 = 0;
-//                    int x1 = camconfig_.im_size_.width - 1;
-//                    int y0 = -c/b;
-//                    int y1 = -(c + a * x1)/b;
-//                    cv::line(outImg,Point2f(x0,y0)+Point2f(camconfig_.im_size_.width , 0), Point2f(x1,y1)+Point2f(camconfig_.im_size_.width , 0),color_, 1);
-//                    cv::circle(outImg,Point2f(grid_center_x,grid_center_y), 5, color_, 2);
-//
-//                    cv::imshow("epipolar line for camera:"+to_string(c1), outImg);
-//                    cv::waitKey(0);
 
                 }
             }
@@ -182,19 +155,15 @@ void FrontEnd::compute_overlap() {
         overlap_grid_c = overlap_grid_c + imgg;
         Mat normed_img;
         cv::normalize(overlap_grid_c, normed_img, 0,255, cv::NORM_MINMAX);
-       //cv::resize(overlap_grid, overlap_grid, camconfig_.im_size_);
-       //cv::imshow("overlap for camera:"+to_string(c1), overlap_grid_c);
-       //cv::waitKey(0);
 
     }
     for(int i =0; i <camconfig_.num_cams_;i++)
     {
-       // cout<<"number of no overlap cells in cam"<<i<<" :"<<non_overlap_fraction.at(i)<<endl;
         non_overlap_fraction.at(i) =  non_overlap_fraction.at(i)/total_non_overlap_cells;
-       // cout<<"fraction of no overlap cells in cam"<<i<<" :"<<non_overlap_fraction.at(i)<<endl;
     }
 
 }
+
 
 void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCameraFrame* lf_frame,
                                 std::vector<IntraMatch>& filtered_intra_matches,
@@ -225,7 +194,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
     lf_frame->mono_size = 0;
     currentFrame->intraMatches.clear();
     currentFrame->intraMatches.reserve(3000);
-    //filtered_intra_matches.reserve(3000);
     vecDescs.reserve(3000);
     mono_keypoints.reserve(3000);
     responses.reserve(3000);
@@ -241,7 +209,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
         vector<int> view_inds;
         int num_views=0;
 
-        ///
         for(auto i = 0; i < temp.matchIndex.size(); ++i)
         {
             //print the intra matches so that we know.
@@ -259,12 +226,9 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                 }
             }
         }
-        //cout<<endl;
         //get the disparity of those points WRT to the biggest baseline it is visible in
         if(num_views>1) {
-            //cout<<"Number of valid intra matches : "<<num_views<<endl;
             //create the DS to hold the 2D points corresponding to this intra match
-            //VLOG(2)<<"Came here"<<endl;
             ///// Traingulation using  opencv sfm and normalized coordinates///////////
             vector<Mat> PJs;
             std::vector<Mat_<double> > xx;
@@ -272,8 +236,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
             vector<Point2f> kps;
             for (int ii = 0; ii < num_views; ii++) {
                 int cur_view_ind = view_inds[ii];
-                //Mat Rt = build_Rt(camconfig_.R_mats_[cur_view_ind], camconfig_.t_mats_[cur_view_ind]);
-               // Mat P1 = cv::Mat_<double>(Rt);
                 PJs.push_back(prjMats[cur_view_ind]);
                 Mat_<double> x1(2, 1);
                 x1(0, 0) = (lf_frame->image_kps[cur_view_ind][temp.matchIndex[cur_view_ind]].pt.x -
@@ -293,40 +255,17 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
 
             if(pt3d_sfm.at<double>(2, 0) < 40 and pt3d_sfm.at<double>(2, 0) > 0.5 ){
 
-                ///////////////////////////CHECK THE TRIANGULATION/////////////////////////////////////////////////
 
                 // check the reprojection errors of the points and the parallalx angle
                 int jj=0;
                 bool accept_intramatch = true;
-//                if((currentFrame->frameId+1) % 100 ==0){   //// DO THIS ONLY During online calib
-//                    for (auto P : PJs){
-//                        int cam_ind = view_inds[jj];
-//                        Mat p3d_conv = P(cv::Range(0, 3), cv::Range(0, 3)) * pt3d_sfm +  P(cv::Range(0, 3), cv::Range(3, 4));
-//                        Mat projected = camconfig_.K_mats_[cam_ind] * p3d_conv;
-//                        double expected_x = projected.at<double>(0,0) / projected.at<double>(2,0);
-//                        double expected_y = projected.at<double>(1,0) / projected.at<double>(2,0);
-//                        double err = (expected_x - kps[jj].x)*(expected_x - kps[jj].x)+(expected_y - kps[jj].y)*(expected_y - kps[jj].y);
-//                        err = err*orBextractor->GetInverseScaleSigmaSquares()[ octs[jj]];
-//                        jj++;
-//                        if(err>5.991){
-//                            accept_intramatch = false;
-//                            // VLOG(2)<<"Bad Intramatch : ";
-//                            break;
-//                        }
-//                    }
-//                }
 
                 if(accept_intramatch){
                     intraMatchViews[num_views]++;
                     Mat projected = camconfig_.K_mats_[0] * pt3d_sfm;
                     double expected_x = projected.at<double>(0, 0) / projected.at<double>(2, 0);
                     double expected_y = projected.at<double>(1, 0) / projected.at<double>(2, 0);
-                   // double inv_depth = 1.0 / projected.at<double>(2, 0);
                     //from multi-cam elas. just for comparison
-                   // double base_0 = -1 * prjMats[0].at<double>(0, 3);
-                   // double f_0 = camconfig_.K_mats_[0].at<double>(0, 0);
-                   // inv_depth = f_0 * base_0 / (double) pt3d_sfm.at<double>(2, 0);
-                    //VLOG(3)<<"Intra Match Point: "<<pt3d_sfm.at<double>(0, 0)<<","<<pt3d_sfm.at<double>(1, 0)<<","<<pt3d_sfm.at<double>(2, 0);
 
                     words_fil.insert(word_cur);
                     lf_frame->lIds.push_back(-1);
@@ -338,7 +277,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                     temp.uv_ref = cv::Point2f(expected_x, expected_y);
                     temp.mono = false;
                     temp.n_rays = num_views;
-                    //filtered_intra_matches.push_back(temp);
                     currentFrame->intraMatches.push_back(temp);
                     vecDescs.push_back(desc_out);
                     lf_frame->intramatch_size++;
@@ -350,7 +288,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                     }
                 }
 
-                //////////////////////////////////////////////////////////////////////////
             }
 
         }
@@ -360,7 +297,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
             temp.uv_ref = lf_frame->image_kps_undist[view_inds[0]][temp.matchIndex[view_inds[0]]].pt;
             temp.n_rays = num_views;
             temp.mono  = true;
-//            lf_frame->lIds.push_back(-1);
             /// We are not adding this feature to intramatches or lids yet. we store them in temp vectors
             /// for monofeatures and then pick based on the distribution strategy along with the rest of the mono features.
             mono_keypoints.push_back(temp);
@@ -370,13 +306,7 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
         }
 
     }
-    // VLOG(1)<<"Average Depth of the Intra Match features: "<<avg_depth_intrmatches / lf_frame->intramatch_size;
     VLOG(1)<<"Number of Intra Match features : "<<lf_frame->intramatch_size;
-    // for(int i=0 ; i < lf_frame->num_cams_ ; i++)
-    //     VLOG(1)<<"num of intra matches with "<<(i+1)<<" views: "<<intraMatchViews[i+1];
-   //if((currentFrame->frameId+1) % 100 ==0)
-   //     bundleAdjustIntraMatches(currentFrame->intraMatches);
-    //     bundleAdjustIntraMatches(filtered_intra_matches);
     ///Tiling of  features for good distribution
     int total_feats = 3000;
     int num_mono_feats = total_feats - lf_frame->intramatch_size;
@@ -387,8 +317,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
     bool refview= false;
 
 
-//    assert (lf_frame->img_size.width % cells_hor == 0);
-//    assert (lf_frame->img_size.height % cells_vert == 0);
     int cell_width = round(lf_frame->img_size.width / cells_hor);
     int cell_height = round(lf_frame->img_size.height / cells_vert);
     if(num_mono_feats <= 0)
@@ -428,7 +356,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                     ind_to_mono++;
                 }
             }
-            //cout<<"number of mono keypoints upto view "<<i<<" : "<<ind_to_mono<<endl;
             // select the top feats_per_cell number of kps in each grid cell
             int selected=0;
             for (int i1 = 0; i1 < cells_hor; i1++) {
@@ -438,7 +365,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                     for (int k = 0; k < sorted_kp_ind.size() && k < feats_per_cell; ++k) {
                         int mono_kp_ind = kp_inds[sorted_kp_ind[k]];
                         currentFrame->intraMatches.push_back(mono_keypoints[mono_kp_ind]);
-                        //filtered_intra_matches.push_back(mono_keypoints[mono_kp_ind]);
                         vecDescs.push_back(mono_descs[mono_kp_ind]);
                         lf_frame->lIds.push_back(-1);
                         lf_frame->mono_size++;
@@ -446,7 +372,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                     }
                 }
             }
-            //cout<<"Number of Kps selected in view "<<i<<": "<<selected<<endl;
         }
     }
     else if (refview){
@@ -458,9 +383,7 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                 intra_match.matchDesc = lf_frame->image_descriptors[0][j];
                 intra_match.uv_ref = lf_frame->image_kps_undist[0][j].pt;
                 intra_match.n_rays = 1;
-                //mono_keypoints.push_back(intra_match);
                 currentFrame->intraMatches.push_back(intra_match);
-                //filtered_intra_matches.push_back(intra_match);
                 vecDescs.push_back(lf_frame->image_descriptors[0][j]);
                 lf_frame->lIds.push_back(-1);
                 lf_frame->mono_size++;
@@ -475,7 +398,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                 Point2f p = lf_frame->image_kps_undist[i][j].pt;
                 if(keypoint_mask[i][j]){// && lf_frame->segMasks[i].at<float>(p.y, p.x) < 0.7){
                     uint8_t ov_val = overlap_masks[i].at<uint8_t>(p);
-                    //if(overlap_masks[i].at<uint8_t>(p)==0){
                         IntraMatch intra_match;
                         intra_match.matchIndex[i] = j;
                         intra_match.matchDesc = lf_frame->image_descriptors[i][j];
@@ -486,7 +408,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
                         responses.push_back(lf_frame->image_kps_undist[i][j].response);
                         mono_descs.push_back(lf_frame->image_descriptors[i][j]);
                         keypoint_mask[i][j] = false;
-                   // }
                 }
                 else{
                     kp_mask_cnt++;
@@ -499,7 +420,6 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
         VLOG(2)<<"Overall number of intramatches so far :" << lf_frame->intramatch_size << endl;
         vector<int> sorted_kp_ind = argsorte(responses, false);
         for(int i = 0; i < sorted_kp_ind.size() && i < (3000 - lf_frame->intramatch_size); ++i){
-            //filtered_intra_matches.push_back(mono_keypoints[sorted_kp_ind[i]]);
             currentFrame->intraMatches.push_back(mono_keypoints[sorted_kp_ind[i]]);
             vecDescs.push_back(mono_descs[sorted_kp_ind[i]]);
             lf_frame->lIds.push_back(-1);
@@ -507,127 +427,13 @@ void FrontEnd::obtainLfFeatures(std::vector<IntraMatch>& matches_map, MultiCamer
         }
         VLOG(2)<<"Overall number of mono features after response baed filtering:"<<mono_keypoints.size()<<endl;
     }
-//    VLOG(0) << "Descriptor of image - " << currentFrame->image_descriptors[0][0] << endl;
     orb_vocabulary->transform(vecDescs, lf_frame->lfBoW, lf_frame->lfFeatVec, 4);
 
     ///////draw the intramatches
-//    Mat all;
-//    all.create(lf_frame->imgs[0].rows, lf_frame->imgs[0].cols * lf_frame->num_cams_, CV_8UC3);
-//    for(int i=0; i < camconfig_.num_cams_ ; i++){
-//        Mat imgBGR;
-//        cvtColor(lf_frame->imgs[i],imgBGR , COLOR_GRAY2BGR);
-//        imgBGR.copyTo(all.colRange(camconfig_.im_size_.width*i, camconfig_.im_size_.width*(i+1)));
-//
-//    }
-//    //Show the support matches
-//    cv::Mat dMap(Size(1,lf_frame->intramatch_size),CV_8UC1);
-//    int ind_Dmap=0;
-//    //for(IntraMatch im : filtered_intra_matches)
-//    for(IntraMatch im : currentFrame->intraMatches){
-//        if(!im.mono) {
-//            dMap.at<uint8_t>(ind_Dmap, 0) = (uint8_t) im.point3D.at<double>(2, 0);
-//            ind_Dmap++;
-//        }
-//
-//    }
-//
-//    ///colors  mono-white, 2 views - r, 3 views -g, 4-views-b, 5-views - mix
-//    Mat out;
-//    Mat img_color;
-//    cv::normalize(dMap, dMap, 0, 220, cv::NORM_MINMAX, CV_8U);
-//    cv::applyColorMap(dMap, out, cv::COLORMAP_RAINBOW);
-//    ind_Dmap=0;
-//    for(IntraMatch im : currentFrame->intraMatches){
-//        if(!im.mono){
-//             Vec3b col1 = out.at<Vec3b>(ind_Dmap,0);
-//             //cv::circle(all, im.uv_ref , 3, Scalar(col1[0],col1[1],col1[2]), 2,8,0 );
-//             Scalar ccc;
-//             if(im.n_rays == 2)
-//                 ccc = Scalar(0,0,255);
-//             else if(im.n_rays == 3)
-//                 ccc = Scalar(0,255,0);
-//             else if(im.n_rays == 4)
-//                 ccc = Scalar(255,0,0);
-//             else if(im.n_rays == 5)
-//                 ccc = Scalar(0,0,255);
-//             else
-//                 cout<<"invalid number of rays:"<<im.n_rays<<endl;
-//
-//            for (int i = 0; i < im.matchIndex.size(); ++i){
-//                if(im.matchIndex[i] != -1)
-//                    cv::circle(all, lf_frame->image_kps_undist[i][im.matchIndex[i]].pt + Point2f(i * lf_frame->imgs[0].cols , 0),  5, Scalar(col1[0],col1[1],col1[2]), 1 );
-//            }
-//
-//            //cv::circle(all, im.uv_ref , 5, ccc, 2,8,0 );
-//             ind_Dmap++;
-//        }
-//        else{
-//            for (int i = 0; i < im.matchIndex.size(); ++i){
-//                if(im.matchIndex[i] != -1)
-//                    cv::circle(all, lf_frame->image_kps_undist[i][im.matchIndex[i]].pt + Point2f(i * lf_frame->imgs[0].cols , 0),  3, Scalar(255,255,255), 2 );
-//            }
-//        }
-//    }
-//
-//    cv::resize(all, all, Size(lf_frame->imgs[0].cols * lf_frame->num_cams_/2 , lf_frame->imgs[0].rows/2));
-//    imshow("img with keypoints ", all);
-//    waitKey(5);
 
-
-//    filtered_words = words_fil;
 
 }
 
-//void FrontEnd::BruteForceMatching(Mat img1, Mat img2, vector<Mat> descs1, vector<Mat> descs2, vector<KeyPoint> kps1, vector<KeyPoint> kps2){
-//    vector<vector<DMatch>> matches_mono;
-//    vector<DMatch> good_matches;
-//    vector<KeyPoint> kp_pts1_mono, kp_pts2_mono;
-//    Mat mask_mono;
-//
-//    Mat descs1_mono = Mat(descs1.size(), descs1[0].cols, CV_8U );
-//    Mat descs2_mono = Mat(descs2.size(), descs2[0].cols, CV_8U );
-//    int ind=0;
-//    for (auto& d : descs1){
-//        d.copyTo(descs1_mono.row(ind));
-//        ind++;
-//    }
-//    ind=0;
-//    for (auto& d : descs2){
-//        d.copyTo(descs2_mono.row(ind));
-//        ind++;
-//    }
-//
-//    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("BruteForce-Hamming");
-//    auto start_intramatch = high_resolution_clock::now();
-//    matcher->knnMatch(descs1_mono, descs2_mono, matches_mono, 2);
-//    auto stop_intramatch = high_resolution_clock::now();
-//    auto duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-//    VLOG(1)<<"time taken for matching brute force "<<duration.count()<<endl;
-//
-//    for(auto &m : matches_mono){
-//        if(m[0].distance < 0.7*m[1].distance) {
-//            if(m[0].distance > 50)
-//                continue;
-//            KeyPoint p_prev = kps1[m[0].queryIdx];
-//            KeyPoint p_cur = kps2[m[0].trainIdx];
-//            //make sure that the points belong to static areas based on the segmasks
-//           // if (currentFrame->segMasks[0].at<float>(p_prev.pt.y, p_prev.pt.x) < 0.7 and currentFrame->segMasks[1].at<float>(p_cur.pt.y, p_cur.pt.x) < 0.7){
-//                kp_pts1_mono.push_back(p_prev);
-//                kp_pts2_mono.push_back(p_cur);
-//                good_matches.push_back(m[0]);
-//           // }
-//
-//        }
-//
-//    }
-//    Mat matches_img;
-//    drawMatches( img1, kps1,img2, kps2, good_matches, matches_img, Scalar::all(-1),
-//                 Scalar::all(-1) );
-//    imshow("Good Matches:"+to_string(0)+"--"+to_string(1), matches_img );
-//    waitKey(5);
-//
-//    cout<<"BRUTEFORCE Total Number of matches between cam0 and cam1: "<<good_matches.size()<<endl;
-//}
 
 void FrontEnd::processFrame() {
     auto start_intramatch = high_resolution_clock::now();
@@ -648,12 +454,9 @@ void FrontEnd::processFrame() {
       vector<DBoW2::NodeId> words_;
       set<DBoW2::NodeId> filtered_words;
     currentFrame->computeIntraMatches(matches_map, words_);
-    //currentFrame->computeIntraMatches(matches_map, false);
     words_ = vector<DBoW2::NodeId>(matches_map.size(), 1);
-    // VLOG(1) << "Total Number of intra matches found before filtering :" << matches_map.size();
     stop_intramatch = high_resolution_clock::now();
     duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-    // VLOG(1) << "time taken for Matching All Cams BoW " << duration.count() << endl;
 
     // Project intra-matches on to reference camera and visualize the disparity prior
     // Find out all the matches which do not have a correspondence in the reference frame
@@ -691,78 +494,11 @@ void FrontEnd::processFrame() {
 
     ////////////////////// Matching indiidual cameras for debugging///////////////////
 
-//    vector<unsigned int> ind1, ind2;set<DBoW2::NodeId> words1;
-//    start_intramatch = high_resolution_clock::now();
-//    currentFrame->BowMatching(0,1,ind1, ind2,words1 );
-//    stop_intramatch = high_resolution_clock::now();
-//    duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-//    VLOG(1)<<"time taken for Matching single Cam BoW "<<duration.count()<<endl;
-//    vector<DMatch> good_matches_bow;
-//    for(int i =0; i <ind1.size(); i++){
-//        if(abs(currentFrame->image_kps_undist[0][ind1[i]].pt.y - currentFrame->image_kps_undist[1][ind2[i]].pt.y) < 50){
-//            DMatch m = DMatch(ind1[i], ind2[i], 0);
-//            good_matches_bow.push_back(m);
-//        }
-//    }
-//    cout<<"BOW Total Number of matches between cam0 and cam1: "<<good_matches_bow.size()<<endl;
-//    Mat matches_img_bow;
-//    drawMatches( currentFrame->imgs[0], currentFrame->image_kps_undist[0], currentFrame->imgs[1], currentFrame->image_kps_undist[1], good_matches_bow, matches_img_bow, Scalar::all(-1),
-//                 Scalar::all(-1) );
-//    imshow("Good Matches Bow:"+to_string(0)+"--"+to_string(1), matches_img_bow );
-//    waitKey(5);
-//
-//    BruteForceMatching(currentFrame->imgs[0], currentFrame->imgs[1], currentFrame->image_descriptors[0], currentFrame->image_descriptors[1],
-//                       currentFrame->image_kps_undist[0], currentFrame->image_kps_undist[1]);
-//
-//    if(lfFrames.size()>1){
-//        MultiCameraFrame* prevLF = lfFrames.back();
-//        BruteForceMatching(prevLF->imgs[0], currentFrame->imgs[0], prevLF->image_descriptors[0], currentFrame->image_descriptors[0],
-//                           prevLF->image_kps_undist[0], currentFrame->image_kps_undist[0]);
-//    }
 
     ////////////////////// Matching indiidual cameras for debugging///////////////////
 
 
 ////////////////////COMPARISON ////////////////////////////////////
-//    start_intramatch = high_resolution_clock::now();
-//    std::vector<IntraMatch> matches_map_2;
-//    currentFrame->computeIntraMatches( matches_map_2, true);
-//    words_ = vector<DBoW2::NodeId>(matches_map_2.size(), 1);
-//    VLOG(2) << "Total Number of intra matches found before filtering :" << matches_map_2.size();
-//    stop_intramatch = high_resolution_clock::now();
-//    duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-//    VLOG(2) << "time taken for Matching All Cams BoW " << duration.count() << endl;
-//    std::vector<IntraMatch> filtered_intra_matches_2;
-//    start_intramatch = high_resolution_clock::now();
-//    obtainLfFeatures(matches_map_2, currentFrame, filtered_intra_matches_2, words_, filtered_words);
-//    stop_intramatch = high_resolution_clock::now();
-//
-//    duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-//    VLOG(2) << "time taken for filter and insert intra matches: " << duration.count() << endl;
-//    VLOG(2) << "Total number of LF features : " << currentFrame->intraMatches.size() << endl;
-//    ////todo keep track of num mono and num intra
-//    /// visualize intra matches across pairs - todo: maybe extract into a function ?
-
-//    start_intramatch = high_resolution_clock::now();
-//    std::vector<IntraMatch> matches_map_3;
-//    currentFrame->computeIntraMatches_chained( matches_map_3, false);
-//    words_ = vector<DBoW2::NodeId>(matches_map_3.size(), 1);
-//    VLOG(2) << "Total Number of intra matches found before filtering :" << matches_map_3.size();
-//    stop_intramatch = high_resolution_clock::now();
-//    duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-//    VLOG(2) << "time taken for Matching All Cams BoW " << duration.count() << endl;
-//    std::vector<IntraMatch> filtered_intra_matches_3;
-//    start_intramatch = high_resolution_clock::now();
-//    obtainLfFeatures(matches_map_3, currentFrame, filtered_intra_matches_3, words_, filtered_words);
-//    stop_intramatch = high_resolution_clock::now();
-//
-//    duration = duration_cast<milliseconds>(stop_intramatch - start_intramatch);
-//    VLOG(2) << "time taken for filter and insert intra matches: " << duration.count() << endl;
-//    VLOG(2) << "Total number of LF features : " << currentFrame->intraMatches.size() << endl;
-//    ////todo keep track of num mono and num intra
-//    /// visualize intra matches across pairs - todo: maybe extract into a function ?
-
-
 
 
     // construct the keypoint matches
@@ -771,50 +507,6 @@ void FrontEnd::processFrame() {
     vector<DMatch> good_matches;
     int matching_cam = 0;
     std::vector<IntraMatch>::iterator matches_iter;
-   /* for (int matching_cam2 = matching_cam + 1; matching_cam2 < currentFrame->num_cams_; matching_cam2++) {
-        int ind = 0;
-        for (matches_iter = filtered_intra_matches.begin();
-             matches_iter != filtered_intra_matches.end(); ++matches_iter) {
-            array<int, 5> temp = matches_iter->matchIndex;
-            if (temp[matching_cam] != -1 and temp[matching_cam2] != -1) {
-                keypoints1.push_back(currentFrame->image_kps[matching_cam][temp[matching_cam]]);
-                keypoints2.push_back(currentFrame->image_kps[matching_cam2][temp[matching_cam2]]);
-                kp_pts1.push_back(currentFrame->image_kps[matching_cam][temp[matching_cam]].pt);
-                kp_pts2.push_back(currentFrame->image_kps[matching_cam2][temp[matching_cam2]].pt);
-                good_matches.push_back(DMatch(ind, ind, 0));
-                ind++;
-            }
-        }
-        Mat img_matches_mono1;
-        cv::drawMatches(currentFrame->imgs[matching_cam], keypoints1, currentFrame->imgs[matching_cam2], keypoints2, good_matches, img_matches_mono1, Scalar::all(-1),
-                        Scalar::all(-1),vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-        ///draw the inatrmatch 2D points as well
-        ////-- Show detected matches
-        imshow("Inter Matches 1"+to_string(matching_cam)+to_string(matching_cam2), img_matches_mono1);
-        waitKey(0);
-        Mat inliers;
-        cv::findFundamentalMat(kp_pts1, kp_pts2, cv::FM_RANSAC, 2, 0.99,inliers);
-
-        Mat img_matches_mono;
-        cv::drawMatches(currentFrame->imgs[matching_cam], keypoints1, currentFrame->imgs[matching_cam2], keypoints2, good_matches, img_matches_mono, Scalar::all(-1),
-                        Scalar::all(-1),inliers, DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-        ///draw the inatrmatch 2D points as well
-        ////-- Show detected matches
-        imshow("Inter Matches"+to_string(matching_cam)+to_string(matching_cam2), img_matches_mono);
-        waitKey(0);
-
-        Mat img_matches_mono2;
-        cv::bitwise_not(inliers,inliers);
-        cv::drawMatches(currentFrame->imgs[matching_cam], keypoints1, currentFrame->imgs[matching_cam2], keypoints2, good_matches, img_matches_mono2, Scalar::all(-1),
-                        Scalar::all(-1),inliers, DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-        ///draw the inatrmatch 2D points as well
-        ////-- Show detected matches
-        imshow("Inter Matches outliers"+to_string(matching_cam)+to_string(matching_cam2), img_matches_mono2);
-        waitKey(0);
-    } */
 }
 
 
@@ -825,24 +517,12 @@ cv::Mat FrontEnd::getPose(){
     return currentFramePose;
 }
 ////////////// this is just for visualizing which poss estimation is better////////////
+
 cv::Mat FrontEnd::getPose_gp3p(){
     unique_lock<mutex> lock(mMutexPose);
     return currentFramePose2;
 }
 
-
-
-
-/*cv::Mat FrontEnd::getPose(){
-    unique_lock<mutex> lock(mMutexPose);
-    cv::Mat pose;
-    if(currentFramePose.isZero()) {
-        pose = cv::Mat::eye(3, 4, CV_32FC1);
-    }
-    else
-        cv::eigen2cv(currentFramePose, pose);
-    return pose;
-}*/
 
 vector<cv::Mat> FrontEnd::getAllPoses(){
     unique_lock<mutex> lock(mMutexPose);
@@ -857,6 +537,7 @@ vector<cv::Mat> FrontEnd::getAllPosesRelocalization() {
     }
     return relocalizationPoses;
 }
+
 
 ////////////??EXTRA for pose vcisualizatrion
 // Absolute pose visualization for loop closure
@@ -873,7 +554,6 @@ vector<cv::Mat> FrontEnd::getAllPoses_gp3p(){
 
 vector<cv::Mat> FrontEnd::getAllPoses_dummy(){
     unique_lock<mutex> lock(mMutexPose);
-//    VLOG(0) << " all poses dummy returned";
     return allPoses_dummy;
 }
 
@@ -894,11 +574,6 @@ void FrontEnd::reset() {
         f->image_kps.clear();
         f->image_kps_kdtree.clear();
     }
-    //currentFrame->imgs.clear();
-    //currentFrame->segMasks.clear();
-    //currentFrame->image_descriptors.clear();
-   // currentFrame->image_kps.clear();
-   // currentFrame->image_kps_undist.clear();
 
 }
 
@@ -938,11 +613,7 @@ void FrontEnd::writeTrajectoryToFile(const string &filename, bool include_dummy)
     for(auto p : posesTowrite){
         Mat Rwc = p.colRange(0,3);
         Mat twc = p.colRange(3,4);
-        //cv::Mat C = (cv::Mat_<double>(3,3) << 0, 1, 0, 0, 0, -1, -1, 0, 0); //above 25_08_2020
-        //cv::Mat C = (cv::Mat_<double>(3,3) << -1, 0, 0, 0, 0, 1, 0, 1, 0);
-        //Rwc = Rwc * C ;
         vector<float> q = RotMatToQuat(Rwc);
-        // VLOG(2)<< setprecision(6) << times.at(ind) << " " <<  setprecision(9) << twc.at<double>(0) << " " << twc.at<double>(1) << " " << twc.at<double>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
         f << setprecision(6) << times.at(ind) << " " <<  setprecision(9) << twc.at<double>(0) << " " << twc.at<double>(1) << " " << twc.at<double>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
         ind++;
     }
@@ -951,20 +622,15 @@ void FrontEnd::writeTrajectoryToFile(const string &filename, bool include_dummy)
 }
 
 
-
 void FrontEnd::insertKeyFrame(gtsam::NavState prevState_, gtsam::imuBias::ConstantBias prevBias_, double timestamp){
 
     VLOG(0) << " Inserting GPS KF at " << currentKFID;
     int currKFID = currentKFID;
     int prevKFID = lfFrames.back()->kfID;
-//    VLOG(0) << "prevkfid = " << prevKFID;
-//
     VLOG(0) << " prev state before this prediction " << prevState_;
     gtsam::NavState next_state = imu_integrator_comb->predict(prevState_, prevBias_);
-//
     gtsam::Pose3 currKfPose = next_state.pose();
     VLOG(0) <<" Predicted pose for the keyframe (imu+gps)" << currKfPose;
-//
     cv::Mat Pose = convertPose3_GTSAM2CV(currKfPose);
 
     currentFrameDummy = new MultiCameraFrame(true, timestamp, camconfig_);
@@ -978,7 +644,6 @@ void FrontEnd::insertKeyFrame(gtsam::NavState prevState_, gtsam::imuBias::Consta
     assert(currentFrameDummy->dummy_kf == true);
 
     lfFrames.push_back(currentFrameDummy);
-//    allPoses.push_back(PoseDummy_wc(cv::Range(0,3), cv::Range(0,4)).clone());
     allPoses_dummy.push_back(PoseDummy_wc(cv::Range(0,3), cv::Range(0,4)).clone());
     combined_poses.push_back(PoseDummy_wc(cv::Range(0,3), cv::Range(0,4)).clone());
     combined_tStamps.push_back(currentFrameDummy->timeStamp);
@@ -1000,13 +665,8 @@ bool FrontEnd::checkGlobalRelocalization()
         // set the pose of the current frame to be the pose found from relocalization
         gtsam::Pose3 w_T_c = relook->result.relative_pose;
         VLOG(0) << "Pose from global relocalization - \n" << w_T_c << std::endl;
-//        // for debugging
-//        currentFrame->pose = convertPose3_GTSAM2CV(w_T_c);
-//        // insert the keyframe
-//        insertKeyFrame();
         // convert Tbc_Relocalization to gtsam Pose3
         gtsam::Pose3 b_T_c = convertPose3_CV2GTSAM(Tbc_cv);
-        // w_T_b = w_T_c * c_T_b
         gtsam::Pose3 w_T_b = w_T_c * b_T_c.inverse();
         // set the pose of the current frame to the relocalized pose
         currentFrame->pose = convertPose3_GTSAM2CV(w_T_b);
@@ -1018,28 +678,25 @@ bool FrontEnd::checkGlobalRelocalization()
         // insert the keyframe
         insertKeyFrame();
 
-        // visualize the relocalized image and pose
-        Mat tmpImg = currentFrame->imgs[0].clone();
-//        cv::cvtColor(tmpImg, tmpImg, cv::COLOR_GRAY2BGR);
-//        cv::Mat relocalizedPose = currentFrame->pose.clone();
-//        cv::Mat relocalizedPose_wc = relocalizedPose * Tbc_cv;
-//        cv::Mat relocalizedPose_wc_ = relocalizedPose_wc(cv::Range(0,3), cv::Range(0,4)).clone();
-        cv::imshow("relocalized image", tmpImg);
-        cv::waitKey(0);
+        // visualize the relocalized image (debug_mode only: waits for a key press)
+        if (DEBUG_MODE) {
+            Mat tmpImg = currentFrame->imgs[0].clone();
+            cv::imshow("relocalized image", tmpImg);
+            cv::waitKey(0);
+        }
 
         // temporary visualization
-//        tracer->visualizeMatches(currentFrame);
     }
     return relocalized;
 }
 
 /* INCOMPLETE : This function is under development. This function should be used for tracking with only vision */
+
 /* COMPLETE : This function is used for tracking with vision and IMU */
 bool FrontEnd::startTrackingModule(gtsam::NavState state)
 {
     cv::Mat result;
     cv::Mat dist;
-//    gtsam::Pose3 relocalizationPoint = relook->result.relative_pose;
     gtsam::Pose3 w_T_bi = state.pose();
     VLOG(0) << "Pose of the current frame before refinement - \n" << w_T_bi << std::endl;
     // transform the pose from the car's base frame, which is IMU frame using the camera to IMU extrinsics
@@ -1076,14 +733,11 @@ bool FrontEnd::startTrackingModule(gtsam::NavState state)
     for (int i = 0; i < 5; i++) {
         tracer->processLandmarks(result.at<int>(0,i), landmarksMap, descriptors);
     }
-//    tracer->retrieveLandmarks(result, descriptors, landmarksMap);
     auto stop_T100 = high_resolution_clock::now();
     auto duration_T100 = duration_cast<milliseconds >(stop_T100 - start_T100);
     VLOG(0) << "Time taken for retrieveLandmarks - " << duration_T100.count() << " m_s" << std::endl;
-//    VLOG(0) << "Size of the landmarks map - " << landmarksMap.size() << std::endl;
     /// Set the tracer->cameraRig.POSE to the relocalizationPoint.
     gtsam::Pose3 ci_T_w = w_T_ci.inverse();
-//    gtsam::Pose3 b_T_w = w_T_ci;
     tracer->cameraRig.c0_T_w = ci_T_w;
     VLOG(0) << "Pose of the camera rig - \n" << tracer->cameraRig.c0_T_w << std::endl;
     tracer->cameraRig.timestamp = currentFrame->timeStamp;
@@ -1124,33 +778,36 @@ bool FrontEnd::startTrackingModule(gtsam::NavState state)
         reprojectedLandmarks = projectedLandmarks;
         reprojectedLandmarkIds = projectedLandmarkIds;
 
-        // for debugging visualize the the best matches on the current frame in green circles and corresponding
-        // projected landmarks in red circles for this image and exit upon esc key press
-        cv::Mat allImagesTogether = cv::Mat::zeros(Size(currentFrame->num_cams_ * currentFrame->img_size.width,
-                                                       currentFrame->img_size.height), CV_8UC3);
-        float reprojectionError = 0;
-        for (int camera =0; camera < currentFrame->num_cams_ ; camera++) {
-            cv::Mat img = currentFrame->imgs[camera];
-            // convert grayscale image to CV_8UC3
-            cv::cvtColor(img, img, cv::COLOR_GRAY2BGR);
-            for (int kps = 0; kps < reprojectedKeypoints[camera].size(); kps++) {
-                cv::circle(img, reprojectedKeypoints[camera][kps].pt, 3, cv::Scalar(0, 255, 0), 2);
-                gtsam::Point3 lm = gtsam::Point3(reprojectedLandmarks[camera][kps].at<double>(0),
-                                                 reprojectedLandmarks[camera][kps].at<double>(1),
-                                                 reprojectedLandmarks[camera][kps].at<double>(2));
-                lm = tracer->cameraRig.c0_T_w.transformFrom(lm);
-                std::vector<Point2, Eigen::aligned_allocator<Point2>> measurement = tracer->multi_cam_rig->project2(lm);
-                cv::circle(img, cv::Point2f(measurement[camera].x(), measurement[camera].y()), 3, cv::Scalar(0, 0, 255), 2);
-                // draw thin line between the reprojected landmark and the keypoint in the image
-                cv::line(img, bestMatches[camera][kps].pt, cv::Point2f(measurement[camera].x(), measurement[camera].y()), cv::Scalar(0, 255, 0), 1);
-                reprojectionError += sqrt(pow(measurement[camera].x() - bestMatches[camera][kps].pt.x, 2) + pow(measurement[camera].y() - bestMatches[camera][kps].pt.y, 2));
+        // debug_mode only: draw the best matches (green) and their projected landmarks (red)
+        if (DEBUG_MODE) {
+            // for debugging visualize the the best matches on the current frame in green circles and corresponding
+            // projected landmarks in red circles for this image and exit upon esc key press
+            cv::Mat allImagesTogether = cv::Mat::zeros(Size(currentFrame->num_cams_ * currentFrame->img_size.width,
+                                                           currentFrame->img_size.height), CV_8UC3);
+            float reprojectionError = 0;
+            for (int camera =0; camera < currentFrame->num_cams_ ; camera++) {
+                cv::Mat img = currentFrame->imgs[camera];
+                // convert grayscale image to CV_8UC3
+                cv::cvtColor(img, img, cv::COLOR_GRAY2BGR);
+                for (int kps = 0; kps < reprojectedKeypoints[camera].size(); kps++) {
+                    cv::circle(img, reprojectedKeypoints[camera][kps].pt, 3, cv::Scalar(0, 255, 0), 2);
+                    gtsam::Point3 lm = gtsam::Point3(reprojectedLandmarks[camera][kps].at<double>(0),
+                                                     reprojectedLandmarks[camera][kps].at<double>(1),
+                                                     reprojectedLandmarks[camera][kps].at<double>(2));
+                    lm = tracer->cameraRig.c0_T_w.transformFrom(lm);
+                    std::vector<Point2, Eigen::aligned_allocator<Point2>> measurement = tracer->multi_cam_rig->project2(lm);
+                    cv::circle(img, cv::Point2f(measurement[camera].x(), measurement[camera].y()), 3, cv::Scalar(0, 0, 255), 2);
+                    // draw thin line between the reprojected landmark and the keypoint in the image
+                    cv::line(img, bestMatches[camera][kps].pt, cv::Point2f(measurement[camera].x(), measurement[camera].y()), cv::Scalar(0, 255, 0), 1);
+                    reprojectionError += sqrt(pow(measurement[camera].x() - bestMatches[camera][kps].pt.x, 2) + pow(measurement[camera].y() - bestMatches[camera][kps].pt.y, 2));
+                }
+                img.copyTo(allImagesTogether.rowRange(0, currentFrame->img_size.height).colRange(camera * currentFrame->img_size.width, (camera + 1) * currentFrame->img_size.width));
             }
-            img.copyTo(allImagesTogether.rowRange(0, currentFrame->img_size.height).colRange(camera * currentFrame->img_size.width, (camera + 1) * currentFrame->img_size.width));
+            cv::resize(allImagesTogether, allImagesTogether, Size(currentFrame->num_cams_ * currentFrame->img_size.width / 2,
+                                                                 currentFrame->img_size.height / 2));
+            cv::imshow("Best matches", allImagesTogether);
+            cv::waitKey(3);
         }
-        cv::resize(allImagesTogether, allImagesTogether, Size(currentFrame->num_cams_ * currentFrame->img_size.width / 2,
-                                                             currentFrame->img_size.height / 2));
-        cv::imshow("Best matches", allImagesTogether);
-        cv::waitKey(3);
         insertKeyFrame();
     }
     return true;
@@ -1192,9 +849,10 @@ void FrontEnd::refinePose() {
             sac_problems::absolute_pose::AbsolutePoseSacProblem> ransac;
     std::shared_ptr<sac_problems::absolute_pose::AbsolutePoseSacProblem> absposeproblem_ptr(
             new sac_problems::absolute_pose::AbsolutePoseSacProblem( adapter,
-                                                                     sac_problems::absolute_pose::AbsolutePoseSacProblem::GP3P));
+                                                                     sac_problems::absolute_pose::AbsolutePoseSacProblem::GP3P,
+                                                                     ransac_random_seed_));
     ransac.sac_model_ = absposeproblem_ptr;
-    ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/camconfig_.K_mats_[0].at<double>(0,2)));
+    ransac.threshold_ = trackingRansacThreshold();
     ransac.max_iterations_ = 100;
 
     vector<bool> inliers = vector<bool>(bearingVectors.size(), false);
@@ -1204,7 +862,6 @@ void FrontEnd::refinePose() {
     struct timeval tic;
     struct timeval toc;
     gettimeofday( &tic, 0 );
-    // VLOG(1) << " RANSAC in  absolutePoseFromGP3P" << std::endl;
     ransac.computeModel();
     gettimeofday( &toc, 0 );
     double ransac_time = TIMETODOUBLE(timeval_minus(toc,tic));
@@ -1253,10 +910,24 @@ void FrontEnd::refinePose() {
     insertKeyFrame();
 }
 
+double FrontEnd::trackingRansacThreshold() const
+{
+    // OpenGV bearing-vector threshold: 1 - cos(angle subtended by the pixel threshold).
+    if (ransac_threshold_px_ > 0)
+        return 1.0 - cos(atan(ransac_threshold_px_ / camconfig_.K_mats_[0].at<double>(0,0)));
+    return 1.0 - cos(atan(sqrt(2.0)*0.5/camconfig_.K_mats_[0].at<double>(0,2)));
+}
+
+void FrontEnd::setDeterministic(bool on)
+{
+    ransac_random_seed_ = !on;
+    if (looper)
+        looper->ransac_random_seed = !on;
+}
+
 void  FrontEnd::initializeLoopClosure()
 {
     // Create Loop closer objects changes the database to the new one.
-//    looper = new LoopCloser(database_vocab, orBextractor);
     looper = new LoopCloser(orb_vocabulary, orBextractor);
     //TODO: Set from a config file. ----
     looper->K_mat = camconfig_.K_mats_;
@@ -1282,6 +953,7 @@ void FrontEnd::insertKeyFrame(){
 
 
     currentFrame->kfID = currentKFID;
+    last_tracked_pose_ = currentFrame->pose.clone();
     currentKFID++;
     currentFramePose = currentFrame->pose(cv::Range(0,3), cv::Range(0,4)).clone();
 
@@ -1290,7 +962,6 @@ void FrontEnd::insertKeyFrame(){
     allPoses.push_back(currentFrame->pose(cv::Range(0,3), cv::Range(0,4)).clone());
     combined_poses.push_back(currentFrame->pose(cv::Range(0,3), cv::Range(0,4)).clone());
     combined_tStamps.push_back(currentFrame->timeStamp);
-    //allPoses1.push_back(currentFrame->pose(cv::Range(0,3), cv::Range(0,4)).clone());
     poseTimeStamps.push_back(currentFrame->timeStamp);
     ///insert also the sparse map for visualization
     vector<Point3f> points;
@@ -1300,15 +971,8 @@ void FrontEnd::insertKeyFrame(){
     if(initialized_ == INITIALIZED)
     {
         /// Loop Detection check:
-        // looper->callerDetectLoop(currentFrame, map, result);
-        // if(result.detection())
         if(relocal)
         {
-//            if (relook->checkRelocalization(currentFrame)) {
-//                VLOG(0) << "++++++++++++++++++++++++++++++++++++++++" << std::endl;
-//                VLOG(0) << "Completed Relocalization!" << std::endl;
-//                VLOG(0) << "++++++++++++++++++++++++++++++++++++++++" << std::endl;
-//            }
         }
         else
         {
@@ -1331,25 +995,7 @@ void FrontEnd::insertKeyFrame(){
 
 
   ///////////// Plot point from stereo reconstruction
-//    for (int i = 0; i < currentFrame->depthMap.cols; i=i+12) {
-//        for (int j = 0; j < currentFrame->depthMap.rows; j=j+12) {
-//            Vec3f pt= currentFrame->depthMap.at<Vec3f>(j,i);
-//            Vec3b cl= currentFrame->imgs_original[0].at<Vec3b>(j, i);
-//            points.push_back(Point3f(pt[0], pt[1],pt[2]));
-//            colors.push_back(Point3f(cl[2]/255.0, cl[1]/255.0, cl[0]/255.0));
-//        }
-//    }
     ///////////// Plot point from intramatch reconstruction
-//    for (const IntraMatch& im : currentFrame->intraMatches){
-//        if(!im.mono){
-//            Mat l = currentFrame->pose.rowRange(0,3).colRange(0,3)*im.point3D + currentFrame->pose.rowRange(0,3).colRange(3,4);
-//            points.emplace_back( l.at<double>(0,0) , l.at<double>(1,0) , l.at<double>(2,0));
-//            float b = currentFrame->imgs_original[0].at<Vec3b>(im.uv_ref.x,im.uv_ref.y)[0]/255.0;
-//            float g = currentFrame->imgs_original[0].at<Vec3b>(im.uv_ref.x,im.uv_ref.y)[1]/255.0;
-//            float r = currentFrame->imgs_original[0].at<Vec3b>(im.uv_ref.x,im.uv_ref.y)[2]/255.0;
-//            colors.emplace_back(r,g,b);
-//        }
-//    }
     sparse_recon.push_back(points);
     sparse_recon_color.push_back(colors);
 }
@@ -1358,12 +1004,12 @@ void FrontEnd::deleteCurrentFrame(){
     delete currentFrame;
 }
 
+
 ///INITIALIZATION AND POSE ESTIMATION and TRIANGULATE IN MONO///
 ///////////////////////////////////////////////////////////////
 
 //////// TAKEN FROM ORBSLAM ///////////////////////////////////////
-//void FrontEnd::triangulatePointTwoLFs(MultiCameraFrame* lf1, MultiCameraFrame* lf2, int featInd1, int featInd2, Mat pose1, Mat pose2,){
-//}
+
 
 void
 FrontEnd::get3D_2DCorrs(MultiCameraFrame *lf, int featInd, Mat pose, vector<Mat> &projmats, vector<Mat> &PJs, std::vector<Mat_<double>> &xs,
@@ -1373,14 +1019,6 @@ FrontEnd::get3D_2DCorrs(MultiCameraFrame *lf, int featInd, Mat pose, vector<Mat>
         int ind = m.matchIndex[i1];
         if (ind != -1){
             /// for the LF frame we need to build projection matrices in world frame
-//            Mat ref_R_cur = camconfig_.R_mats_[i1].t();
-//            Mat ref_t_cur = -ref_R_cur*camconfig_.t_mats_[i1];
-//            Mat ref_T_cur = Mat::eye(4, 4, CV_64F);
-//            ref_R_cur.copyTo(ref_T_cur(cv::Range(0, 3), cv::Range(0, 3)));
-//            ref_t_cur.copyTo(ref_T_cur(cv::Range(0, 3), cv::Range(3, 4)));
-//            Mat W_T_cur = pose * ref_T_cur;
-//            Mat cur_T_W = W_T_cur.inv();
-//            Mat P1 = cv::Mat_<double>(cur_T_W(cv::Range(0,3), cv::Range(0,4)));
             PJs.push_back(projmats[i1](cv::Range(0,3), cv::Range(0,4)));
             Mat_<double> x1(2, 1);
             x1(0, 0) = (lf->image_kps_undist[i1][ind].pt.x - camconfig_.K_mats_[i1].at<double>(0,2))/camconfig_.K_mats_[i1].at<double>(0,0);
@@ -1392,14 +1030,12 @@ FrontEnd::get3D_2DCorrs(MultiCameraFrame *lf, int featInd, Mat pose, vector<Mat>
         }
     }
 }
-///////////////////////////////////////////////////////////////
 bool FrontEnd::initialization(){
     // if this is the first frame then insert it as a KF
     // todo: May be check if there are enough intra matches for no
     VLOG(0)<<"Initializing ......."<<endl;
     if (init_cond_ == MIN_FEATS){
         if(currentFrame->intraMatches.size() > 150){
-           // currentFramePose = cv::Mat::eye(3, 4, CV_64F);
 
             currentFrame->pose = cv::Mat::eye(4, 4, CV_64F);
             insertKeyFrame();
@@ -1414,7 +1050,6 @@ bool FrontEnd::initialization(){
 
             // Adding IMU pose
             // We have Tbw and Tbc
-            // Twc = inv(Tbw) * Tbc
             // T body to world:
 
             // as of now there is no dead reckoning. So, we are using the first
@@ -1451,15 +1086,26 @@ bool FrontEnd::initialization(){
                 }
 
             } else {
-
+                // Stereo only: at start-up the map frame is the first camera frame. After a tracking
+                // loss we restart at the last tracked pose (constant-position assumption) instead of
+                // the origin, so the trajectory and the map stay in one frame.
                 currentFrame->pose = cv::Mat::eye(4, 4, CV_64F);
+                if (initialized_ == REINITIALIZING && !last_tracked_pose_.empty()) {
+                    VLOG(0) << "Re-initializing vision at the last tracked pose";
+                    currentFrame->pose = last_tracked_pose_.clone();
+                    const cv::Mat R = currentFrame->pose(cv::Range(0, 3), cv::Range(0, 3));
+                    const cv::Mat t = currentFrame->pose(cv::Range(0, 3), cv::Range(3, 4));
+                    for (auto &im: currentFrame->intraMatches) {
+                        if (!im.mono)
+                            im.point3D = R * im.point3D + t;
+                    }
+                }
             }
 
             insertKeyFrame();
             return false;
         }
         else{
-//            assert(lfFrames.size() == 1);
             initializationTrials++;
             /// match the features between current frame and the prev frame
             MultiCameraFrame* lf_prev;
@@ -1492,7 +1138,6 @@ bool FrontEnd::initialization(){
             vector<bool> inliers;
             vector<bool> mono_inliers;
             vector<Mat> triangulatedPts = vector<Mat>(inter_matches.size() + mono_matches.size());
-//            vector<Mat> triangulatedPtNormals = vector<Mat>(inter_matches.size() + mono_matches.size());
             Mat T = Mat::eye(4, 4, CV_64F);
             Mat T_17 = Mat::eye(4, 4, CV_64F);
             int num_mono_inliers = poseFromSeventeenPt(lf_prev, currentFrame, mono_matches, mono_inliers, T_17, false);
@@ -1525,7 +1170,6 @@ bool FrontEnd::initialization(){
                 for(auto &m : mono_matches) {
                     if (mask_mono.at<uchar>(i)){
                         mono_inliers.push_back(true);
-                        //num_inliers++;
                     }
                     else
                         mono_inliers.push_back(false);
@@ -1544,10 +1188,21 @@ bool FrontEnd::initialization(){
             else{
                 T = T_17.clone();
             }
+            // GP3P on the first frame's (world-frame) stereo points gives the absolute pose; the
+            // other estimators give the motion relative to lf_prev. Both are identical at start-up,
+            // when lf_prev is the origin, but differ after a re-initialization at the last pose.
+            const bool T_is_relative = !(inter_matches.size() > 50 && posestAlgo_ == G_P3P);
+            if (T_is_relative)
+                T = lf_prev->pose * T;
+            const Mat T_prev_cur = lf_prev->pose.inv() * T;
 
-            if(norm(T.colRange(3,4).rowRange(0,3)) > kf_translation_threshold*0.5 ){
+            if(norm(T_prev_cur.colRange(3,4).rowRange(0,3)) > kf_translation_threshold*0.5 ){
                 //if the inliers are greater than a threshold (100)
 
+                // With <= 50 stereo matches the stereo pose is not estimated and inliers is empty: those
+                // matches count as outliers. Keep both inlier vectors aligned with their matches.
+                inliers.resize(inter_matches.size(), false);
+                mono_inliers.resize(mono_matches.size(), false);
                 inter_matches.insert(inter_matches.end(), mono_matches.begin(), mono_matches.end());
                 inliers.insert(inliers.end(), mono_inliers.begin(), mono_inliers.end());
 
@@ -1556,7 +1211,6 @@ bool FrontEnd::initialization(){
                     Mat prev_T_ref = Mat::eye(4, 4, CV_64F);
                     camconfig_.R_mats_[c_ind].copyTo(prev_T_ref(cv::Range(0, 3), cv::Range(0, 3)));
                     camconfig_.t_mats_[c_ind].copyTo(prev_T_ref(cv::Range(0, 3), cv::Range(3, 4)));
-                    // T_c_w  = T_c_b * T_b_w
                     Mat cur_T_W = prev_T_ref * lf_prev->pose.inv();
                     Mat P1 = cv::Mat_<double>(cur_T_W(cv::Range(0, 3), cv::Range(0, 4)));
                     ProjMats1.push_back(P1.clone());
@@ -1607,17 +1261,12 @@ bool FrontEnd::initialization(){
                     mcslam::geom::triangulatePoints(xs, PJs, pt3d);
 
                     //TODO: check if this is correct - it is in the for loop below. but why?
-                //    if(pt3d.at<double>(2,0) < 0){
-                //        inliers[i] = false;
-                //        continue;
-                //    }
 
                     // check the reprojection errors of the points and the parallalx angle
                     int jj = 0;
                     for (auto P: PJs) {
 
                         int cam_ind = view_inds[jj];
-                        //cout<<"landmark camrea view: "<<cam_ind<<endl;
                         // Convert the 3D point from world into camera frame. CHeck if it is behind the camera.
                         Mat p3d_conv = P(cv::Range(0, 3), cv::Range(0, 3)) * pt3d +  P(cv::Range(0, 3), cv::Range(3, 4));
                         if(p3d_conv.at<double>(2,0) < 0){
@@ -1652,13 +1301,7 @@ bool FrontEnd::initialization(){
 
                         parllaxVec.push_back(cosParallax);
                         if(cosParallax < 0.99998){
-                            //Eigen::Vector3d pt;
-                            //for(int j=0; j<3; ++j)
-                            //    pt[j] = pt3d.at<double>(j,0);
                             triangulatedPts[i] = pt3d;
-//                            //compute normal
-//                            Mat normal = (normal1/dist1) + (normal2/dist2);
-//                            triangulatedPtNormals[i] = normal/2.0;
                             num_triangulated++;
                             avg_depth += dist2;
                             depthVec.push_back(dist2);
@@ -1676,8 +1319,6 @@ bool FrontEnd::initialization(){
                 double parallax = 0.0;
                 if (parllaxVec.size() > 0 and depthVec.size()>0){
                     sort(parllaxVec.begin(),parllaxVec.end());
-                    //size_t idx = min(50,int(parllaxVec.size()-1));
-                   // parallax = acos(parllaxVec[idx])*180/CV_PI;
                     size_t idx = int(parllaxVec.size()/2);
                     parallax = parllaxVec[idx];
 
@@ -1698,8 +1339,10 @@ bool FrontEnd::initialization(){
                     if(num_triangulated > 50)
                     {
                         if(camconfig_.num_cams_ == 1 or inter_matches.size() < 50){
-                             ///scale the translation to the scene depth
-                            T.colRange(3,4).rowRange(0,3) = T.colRange(3,4).rowRange(0,3)/median_scene_depth;
+                             ///scale the translation (relative to lf_prev) to the scene depth
+                            Mat T_rel = lf_prev->pose.inv() * T;
+                            T_rel.colRange(3,4).rowRange(0,3) = T_rel.colRange(3,4).rowRange(0,3)/median_scene_depth;
+                            T = lf_prev->pose * T_rel;
                             VLOG(2)<<"Scaled baseline: "<<norm(T.colRange(3,4).rowRange(0,3));
                             VLOG(2)<<"Pose: "<<T;
                         }
@@ -1711,8 +1354,6 @@ bool FrontEnd::initialization(){
                         //insert the two LF frames as keyframes
                         currentFramePose = T(cv::Range(0,3),cv::Range(0,4)).clone();
                         currentFrame->pose = T.clone();
-                        //currentFramePose1 = T(Range(0,3),Range(0,4)).clone();
-                        // currentFramePose2 = T(Range(0,3),Range(0,4)).clone();
 
                         lf_prev->numTrackedLMs = num_triangulated;
                         currentFrame->numTrackedLMs = num_triangulated;
@@ -1723,25 +1364,17 @@ bool FrontEnd::initialization(){
                             DMatch m = inter_matches[i];
                             if(inliers[i])
                             {
-                                // cout<<"3D point from Intra match triangulation"<<endl;
-                                // cout<<lf_prev->points_3D[ m.queryIdx];
-                                // cout<<"3D point form relative pose triangulation"<<endl;
-                                // cout<<triangulatedPts[i];
-                                // cout<<"descriptor distance : "<<m.distance<<endl;
                                 if(camconfig_.num_cams_ == 1 or inter_matches.size() < 50){
                                     triangulatedPts[i] = triangulatedPts[i]/ median_scene_depth;
                                 }
                                 int l_id = map->insertLandmark( triangulatedPts[i], lf_prev, m.queryIdx, lf_prev->intraMatches[m.queryIdx].uv_ref);
                                 Landmark* lm = map->getLandmark(l_id);
                                 lm->addLfFrame(currentFrame, m.trainIdx, currentFrame->intraMatches[m.trainIdx].uv_ref);
-//                                VLOG(2)<<"lm normal: " << lm->normal;
-//                                VLOG(2)<<"Computed normal:"<<triangulatedPtNormals[i]; //added the normal to landmark when it is created
                                 lf_prev->lIds[m.queryIdx] = l_id;
                                 currentFrame->lIds[m.trainIdx] = l_id;
 
                                 VLOG(3)<<"Inserted Landmark at"<<i<<"lid:"<<l_id<<": "<<triangulatedPts[i]<<endl;
 
-                                //cout<<"prev_ind : "<<m.queryIdx<<"cur Ind: "<<m.trainIdx<<"Lid: "<<l_id<<endl;
                             }
 
                         }
@@ -1763,16 +1396,16 @@ bool FrontEnd::initialization(){
                 allPoses.pop_back();
                 combined_poses.pop_back();
                 combined_tStamps.pop_back();
-                // allPoses1.pop_back();
-//                allPoses1.pop_back();
-                //allPoses2.clear();
                 poseTimeStamps.pop_back();
             }
             return false;
 
         }
     }
+    // MIN_FEATS: not enough intra matches in this frame yet
+    return false;
 }
+
 
 void FrontEnd::findInterMatches(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur,
                                 std::vector<DMatch>& matches_z_filtered, std::vector<DMatch>& matches_mono_z_filtered,
@@ -1940,10 +1573,7 @@ void FrontEnd::findInterMatches(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_
 
     VLOG(1)<<"number of inter matches after ratio test : "<< good_matches.size()<<endl;
     VLOG(1) << "number of inter matches of Intramatch features after z test: " << z_filtered_matches_cnt << endl;
-    //cout << "percentage of good points" << (z_filtered_matches_cnt / (float)good_matches.size()) * 100.0 << endl;
     VLOG(1)<<"Number of landmark matches"<<num_lm_matches_zfil<<endl;
-    //cout<<"Number of landmark matches unique"<<num_lm_matches_unique<<endl;
-    //VLOG(1)<<"Number of landmark matches z filtered"<<num_lm_matches_zfil<<endl;
     if( viz){
         for(int i=0; i <lf_prev->num_cams_; i++){
             for(int j=0; j < lf_cur->num_cams_; j++){
@@ -2098,10 +1728,7 @@ void FrontEnd::findInterMatches(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_
 
     VLOG(1)<<"number of inter matches after ratio test : "<< good_matches.size()<<endl;
     VLOG(1) << "number of inter matches of Intramatch features after z test: " << z_filtered_matches_cnt << endl;
-    //cout << "percentage of good points" << (z_filtered_matches_cnt / (float)good_matches.size()) * 100.0 << endl;
     VLOG(1)<<"Number of landmark matches"<<num_lm_matches_zfil<<endl;
-    //cout<<"Number of landmark matches unique"<<num_lm_matches_unique<<endl;
-    //VLOG(1)<<"Number of landmark matches z filtered"<<num_lm_matches_zfil<<endl;
     if( viz){
         for(int i=0; i <lf_prev->num_cams_; i++){
             for(int j=0; j < lf_cur->num_cams_; j++){
@@ -2167,7 +1794,6 @@ void FrontEnd::findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *
 
     }
 
-    // cout << "Total Number of Inter matches" << matches.size() << endl;
 
     if(false){
 
@@ -2191,7 +1817,6 @@ void FrontEnd::findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *
                         Scalar::all(-1), vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
 
-
         //Show the support matches
         cv::Mat dMap(Size(1,lf_prev->intramatch_size),CV_8UC3);
         int ind_Dmap=0;
@@ -2204,7 +1829,6 @@ void FrontEnd::findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *
         }
 
         Mat out;
-        //all.create(lf_prev->imgs[0].rows, lf_prev->imgs[0].cols * 2, CV_8UC3);
         cv::normalize(dMap, dMap, 0, 220, cv::NORM_MINMAX, CV_8U);
         cv::applyColorMap(dMap, out, cv::COLORMAP_RAINBOW);
         ind_Dmap=0;
@@ -2299,39 +1923,14 @@ void FrontEnd::findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *
     vector<unsigned int> ind1, ind2;
     set<DBoW2::NodeId> words;
     // perform intermatching using fbow rather than dbow for faster computations
-//    cv::Mat img_desc1, img_desc2;
-//    vector<Mat> img_desc1_vec, img_desc2_vec;
 //    take the current frame and prev frames intramatches and convert them to descs
-//    for(auto& im : lf_prev->intraMatches){
-//        img_desc1.push_back(im.matchDesc);
-//        img_desc1_vec.push_back(im.matchDesc);
-//    }
-//    for(auto& im : lf_cur->intraMatches){
-//        img_desc2.push_back(im.matchDesc);
-//        img_desc2_vec.push_back(im.matchDesc);
-//    }
 //    obtain the fbow bow and feature vectors
-//    bowVector prevFrameBowVector;
-//    bowFeatureVector prevFrameFeatVec;
-//    orb_vocabulary_fbow->transform(img_desc1, 4, prevFrameBowVector, prevFrameFeatVec);
-//    bowVector currentFrameBowVector;
-//    bowFeatureVector currentFrameFeatVec;
-//    orb_vocabulary_fbow->transform(img_desc2, 4, currentFrameBowVector, currentFrameFeatVec);
     // perform the intermatching
     auto start1 = std::chrono::high_resolution_clock::now();
     InterMatchingBow(lf_prev, lf_cur, ind1, ind2, words);
-//    InterMatchingFBow(prevFrameFeatVec, currentFrameFeatVec, img_desc1_vec, img_desc2_vec, ind1, ind2);
     auto end1 = std::chrono::high_resolution_clock::now();
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1);
     VLOG(0) << "Time taken for intermatching using dbow: " << duration1.count() << " milliseconds" << endl;
-//    ind1.clear();
-//    ind2.clear();
-//    InterMatchingBow(lf_prev->BoW_feats[0], lf_cur->BoW_feats[0], lf_prev->image_descriptors[0], lf_cur->image_descriptors[0], ind1, ind2);
-//    VLOG(2)<<"Number of Bow Matches between prev left- cur left :"<<ind1.size();
-//    ind1.clear();
-//    ind2.clear();
-//    InterMatchingBow(lf_prev->BoW_feats[0], lf_cur->BoW_feats[1], lf_prev->image_descriptors[0], lf_cur->image_descriptors[1], ind1, ind2);
-//    VLOG(2)<<"Number of Bow Matches between prev left- cur right :"<<ind1.size();
 
     assert(ind1.size() == ind2.size());
     vector<vector<vector<DMatch>>> vizMatches(lf_prev->num_cams_,vector<vector<DMatch>>(lf_cur->num_cams_, vector<DMatch>()));
@@ -2372,7 +1971,6 @@ void FrontEnd::findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *
 
     }
     VLOG(1)<<"Total Number of Inter matches "<<matches.size()<<endl;
-    // cout<<"Total Number of Inter matches"<<matches.size()<<endl;
     if(viz){
 
         vector<cv::KeyPoint> kps1, kps2;
@@ -2408,7 +2006,7 @@ void FrontEnd::findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *
 }
 
 
-void FrontEnd::InterMatchingBow( DBoW2::FeatureVector lfFeatVec1, DBoW2::FeatureVector lfFeatVec2, std::vector<cv::Mat> img_desc1, std::vector<cv::Mat> img_desc2, vector<unsigned int>& indices_1,
+void FrontEnd::InterMatchingBow( const DBoW2::FeatureVector &lfFeatVec1, const DBoW2::FeatureVector &lfFeatVec2, const std::vector<cv::Mat> &img_desc1, const std::vector<cv::Mat> &img_desc2, vector<unsigned int>& indices_1,
                                 vector<unsigned int>& indices_2 ){
     indices_2.clear();
     indices_1.clear();
@@ -2422,7 +2020,6 @@ void FrontEnd::InterMatchingBow( DBoW2::FeatureVector lfFeatVec1, DBoW2::Feature
     const auto featVec1_end = lfFeatVec1.end(); // std::next(featVec1.begin(),200);    //
     const auto featVec2_end = lfFeatVec2.end(); //std::next(featVec2.begin(),200);   //
     // until both the feature vectors iterators reach the end
-
 
 
     while(featVec1_it != featVec1_end && featVec2_it != featVec2_end)
@@ -2453,18 +2050,16 @@ void FrontEnd::InterMatchingBow( DBoW2::FeatureVector lfFeatVec1, DBoW2::Feature
         {
             // move old_it forward
             featVec1_it = lfFeatVec1.lower_bound(featVec2_it->first);
-            // old_it = (first element >= cur_it.id)
         }
         else
         {
             // move cur_it forward
             featVec2_it = lfFeatVec2.lower_bound(featVec1_it->first);
-            // cur_it = (first element >= old_it.id)
         }
     }
 }
 
-void FrontEnd::InterMatchingFBow( bowFeatureVector lfFeatVec1, bowFeatureVector lfFeatVec2, vector<Mat> img_desc1_vec, vector<Mat> img_desc2_vec, vector<unsigned int>& indices_1,
+void FrontEnd::InterMatchingFBow( const bowFeatureVector &lfFeatVec1, const bowFeatureVector &lfFeatVec2, const vector<Mat> &img_desc1_vec, const vector<Mat> &img_desc2_vec, vector<unsigned int>& indices_1,
                                  vector<unsigned int>& indices_2 ){
     indices_2.clear();
     indices_1.clear();
@@ -2478,7 +2073,6 @@ void FrontEnd::InterMatchingFBow( bowFeatureVector lfFeatVec1, bowFeatureVector 
     const auto featVec1_end = lfFeatVec1.end(); // std::next(featVec1.begin(),200);    //
     const auto featVec2_end = lfFeatVec2.end(); //std::next(featVec2.begin(),200);   //
     // until both the feature vectors iterators reach the end
-
 
 
     while(featVec1_it != featVec1_end && featVec2_it != featVec2_end)
@@ -2510,13 +2104,11 @@ void FrontEnd::InterMatchingFBow( bowFeatureVector lfFeatVec1, bowFeatureVector 
         {
             // move old_it forward
             featVec1_it = lfFeatVec1.lower_bound(featVec2_it->first);
-            // old_it = (first element >= cur_it.id)
         }
         else
         {
             // move cur_it forward
             featVec2_it = lfFeatVec2.lower_bound(featVec1_it->first);
-            // cur_it = (first element >= old_it.id)
         }
     }
 }
@@ -2546,7 +2138,6 @@ void FrontEnd::InterMatchingBow(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_
         img_desc2.push_back(d.matchDesc);
 
 
-
     while(featVec1_it != featVec1_end && featVec2_it != featVec2_end)
     {
         // check if the node ID of both the vectors is same.
@@ -2568,7 +2159,6 @@ void FrontEnd::InterMatchingBow(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_
             indices_2.insert(indices_2.end(), j_ind_tmp.begin(), j_ind_tmp.end());
 
             if(i_ind_tmp.size()>= 1){
-                //cout<<"WordID :"<< featVec1_it->first <<endl;
                 words.insert(featVec1_it->first);
             }
             // move featVec1_it and featVec2_it forward
@@ -2579,18 +2169,14 @@ void FrontEnd::InterMatchingBow(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_
         {
             // move old_it forward
             featVec1_it = lf_prev->lfFeatVec.lower_bound(featVec2_it->first);
-            // old_it = (first element >= cur_it.id)
         }
         else
         {
             // move cur_it forward
             featVec2_it = lf_cur->lfFeatVec.lower_bound(featVec1_it->first);
-            // cur_it = (first element >= old_it.id)
         }
     }
 }
-
-//void FrontEnd::poseFromPCAlignment(opengv::points_t points1, opengv::points_t points2, Mat& T
 
 
 //// Here matches have queryIDx indexing lids vector and TrainIDx indexing currentFrame's  Intramatches vector.
@@ -2611,7 +2197,6 @@ void FrontEnd::OptimizePose(vector<DMatch> matches, vector<int> lids, vector<boo
     cv::eigen2cv(nonlinear_transformation, Twb_34);
     Twb = Mat::eye(4, 4, CV_64F);
     Twb_34.copyTo(Twb(cv::Range(0, 3), cv::Range(0, 4)));
-    //for(size_t i = 0; i < ransac.inliers_.size(); i++)
     for(int i =0; i < matches.size(); i++)
     {
         DMatch m = matches[i];
@@ -2642,7 +2227,6 @@ void FrontEnd::OptimizePose(vector<DMatch> matches, vector<int> lids, vector<boo
                     for(int aa=0; aa< currentFrame->num_cams_ ; aa++){
                         VLOG(2)<<aa<<": "<< iMatch_prev.matchIndex[aa]<<","<<iMatch_cur.matchIndex[aa];
                     }
-                   // drawInterMatch(prev_lf, currentFrame, iMatch_prev,iMatch_cur, "Intermatch");
 
                     VLOG(2)<<"Initial error : "<<(expected_x - kp.pt.x)<<" , "<<(expected_y - kp.pt.y);
                     VLOG(2)<<camconfig_.R_mats_[camInd];
@@ -2671,7 +2255,6 @@ void FrontEnd::OptimizePose(vector<DMatch> matches, vector<int> lids, vector<boo
                 graph.emplace_shared<RigResectioningFactor>(huberModel, Symbol('x', 0), K, p_, P_, kp.octave, camInd, bTc);
                 fac_to_match.push_back(Idx);
                 factorInd++;
-                //break;
             }
         }
         Idx++;
@@ -2691,11 +2274,8 @@ void FrontEnd::OptimizePose(vector<DMatch> matches, vector<int> lids, vector<boo
         initialEstimate.insert(Symbol('x', 0), initPose);
 
         result = LevenbergMarquardtOptimizer(graph, initialEstimate, lm_params).optimize();
-        //cout<<"Graph Num Factors: "<<graph.nrFactors()<<endl;
-        //result.print("Iteration "+ to_string(iter)+"results:\n");
         VLOG(3) << "initial error = " << graph.error(initialEstimate) << endl;
         VLOG(3) << "final error = " << graph.error(result) << endl;
-        //auto sT = high_resolution_clock::now();
         int outlier_cnt=0;
         gtsam::Pose3 curest = result.at<gtsam::Pose3>(Symbol('x', 0));
         for(int facInd =0 ; facInd < graph.size(); facInd++){
@@ -2712,21 +2292,15 @@ void FrontEnd::OptimizePose(vector<DMatch> matches, vector<int> lids, vector<boo
                     // this is an outlier. mark it
                     graph.remove(facInd);
                     inliers[fac_to_match[facInd]] = false;
-                    //VLOG(2)<<"Big reprojection error . Deleting factor.err: "<<error;
                     outlier_cnt++;
                 }
             }
 
         }
         VLOG(3)<<"Number of removed factors as outliers: "<<outlier_cnt;
-       // auto stT = high_resolution_clock::now();
-       // auto duration = duration_cast<milliseconds>(stT - sT);
-        //
-        //VLOG(2)<<"Total time taken for removing factors gtsam: "<<duration.count()<<endl;
     }
     auto stopT = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stopT - startT);
-    //
     VLOG(3)<<"Total time taken for optimization in pose estimation: "<<duration.count()<<endl;
 
     gtsam::Pose3 pose = result.at<gtsam::Pose3>(  gtsam::Symbol('x', 0));
@@ -2799,23 +2373,8 @@ int FrontEnd::poseFromPCAlignment(MultiCameraFrame* lf_prev, MultiCameraFrame* l
     //sac style orientation
 
     //Create a PointCloudSacProblem and Ransac
-    /*sac::Ransac<
-            sac_problems::point_cloud::PointCloudSacProblem> ransac;
-    std::shared_ptr<
-            sac_problems::point_cloud::PointCloudSacProblem> relposeproblem_ptr(
-            new sac_problems::point_cloud::PointCloudSacProblem(adapter));
-    ransac.sac_model_ = relposeproblem_ptr;
-    ransac.threshold_ = 0.2;
-    ransac.max_iterations_ = 100;
-
-    ransac.computeModel(0);
-    transformation_t nonlinear_transformation = ransac.model_coefficients_;
-    cout<<"estimated pose sac :"<<endl;
-    std::cout << ransac.model_coefficients_ << std::endl << std::endl;
-    std::cout << "the number of inliers in RANSAC is: " << ransac.inliers_.size()<<endl;*/
 
 
-    //CHECK/DEBUG THE 3d-3d pose estimation
     int ii=0;
     int inlier_count = 0;
     float avg_error = 0;
@@ -2826,14 +2385,8 @@ int FrontEnd::poseFromPCAlignment(MultiCameraFrame* lf_prev, MultiCameraFrame* l
         if(delta.norm() < 0.1){
             inlier_count++;
             inliers[ii] = true;
-           // cout<<"delta : "<< delta.norm()<<endl;
-            //cout<<"P1 : "<<points1.at(ii) ;
-            //cout<<"P2 in 1 : "<<p2_in_1<<endl;
         }
         else{
-           // cout<<"delta : "<< delta.norm()<<endl;
-            //cout<<"P1 : "<<points1.at(ii) ;
-            //cout<<"P2 in 1 : "<<p2_in_1<<endl;
         }
 
         ii++;
@@ -2845,10 +2398,6 @@ int FrontEnd::poseFromPCAlignment(MultiCameraFrame* lf_prev, MultiCameraFrame* l
     Mat curPos;
     cv::eigen2cv(nonlinear_transformation, curPos);
     double n = cv::norm(curPos.colRange(3,4));
-    /*if(n > 1e-6){
-        Mat norm_t = curPos.colRange(3,4) * 2 ;
-        norm_t.copyTo(curPos.colRange(3,4));
-    }*/
 
     T = Mat::eye(4, 4, CV_64F);
     curPos.copyTo(T(cv::Range(0, 3), cv::Range(0, 4)));
@@ -2864,7 +2413,6 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
     std::vector<int> camCorrespondences1;
     std::vector<int> camCorrespondences2;
 
-    ////////////////////////////////////////////////////
 
     inliers = vector<bool>(matches.size(),false);
 
@@ -2873,7 +2421,6 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
         for (int i =0; i <currentFrame->num_cams_ ; i++){
             if(iMatch.matchIndex[i] != -1){
                 Point2f uv_coord = lf_prev->image_kps_undist[i][iMatch.matchIndex[i]].pt;
-                //camconfig_.K_mats_[i].inv();
                 double norm_x = (uv_coord.x - camconfig_.K_mats_[i].at<double>(0,2))/camconfig_.K_mats_[i].at<double>(0,0);
                 double norm_y = (uv_coord.y - camconfig_.K_mats_[i].at<double>(1,2)) / camconfig_.K_mats_[i].at<double>(1,1);
                 Eigen::Vector3d pt;
@@ -2890,7 +2437,6 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
         for (int i =0; i <currentFrame->num_cams_ ; i++){
             if(iMatch_cur.matchIndex[i] != -1){
                 Point2f uv_coord = lf_cur->image_kps_undist[i][iMatch_cur.matchIndex[i]].pt;
-                //camconfig_.K_mats_[i].inv();
                 double norm_x = (uv_coord.x - camconfig_.K_mats_[i].at<double>(0,2))/camconfig_.K_mats_[i].at<double>(0,0);
                 double norm_y = (uv_coord.y - camconfig_.K_mats_[i].at<double>(1,2)) / camconfig_.K_mats_[i].at<double>(1,1);
                 Eigen::Vector3d pt;
@@ -2905,11 +2451,7 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
 
     }
 
-    ////////////////////////////////////////////////////
 
-    //for (int i =0; i <currentFrame->num_cams_ ; i++){
-   //    (*currentFrame->rotations_ptr)[i];
-   // }
     //create non-central relative adapter
     relative_pose::NoncentralRelativeAdapter adapter(
             bearingVectors1,
@@ -2925,7 +2467,8 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
     std::shared_ptr<sac_problems::relative_pose::NoncentralRelativePoseSacProblem>relposeproblem_ptr(
             new sac_problems::relative_pose::NoncentralRelativePoseSacProblem(
                     adapter,
-                    sac_problems::relative_pose::NoncentralRelativePoseSacProblem::SEVENTEENPT));
+                    sac_problems::relative_pose::NoncentralRelativePoseSacProblem::SEVENTEENPT, false,
+                    ransac_random_seed_));
     ransac.sac_model_ = relposeproblem_ptr;
     ransac.threshold_ = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/camconfig_.K_mats_[0].at<double>(0,2))));
     ransac.max_iterations_ = 10000;
@@ -2939,25 +2482,12 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
     double ransac_time = TIMETODOUBLE(timeval_minus(toc,tic));
 
     //print the results
-    // std::cout<<"/////////////////////SEVENTEEN PT RANSAC/////////////////////"<<endl;
-    //std::cout << "the ransac threshold is: " << ransac.threshold_ << std::endl;
-    //std::cout << "the ransac results is: " << std::endl;
-    //std::cout << ransac.model_coefficients_ << std::endl << std::endl;
-    //std::cout << "Ransac needed " << ransac.iterations_ << " iterations and ";
-    //std::cout << ransac_time << " seconds" << std::endl << std::endl;
-    // std::cout << "the number of inliers is: " << ransac.inliers_.size();
-    // std::cout << std::endl << std::endl;
-    //std::cout << "the found inliers are: " << std::endl;
-    //for(size_t i = 0; i < ransac.inliers_.size(); i++)
-    //    std::cout << ransac.inliers_[i] << " ";
-    //std::cout << std::endl << std::endl;
 
     transformation_t nonlinear_transformation = ransac.model_coefficients_;
     Mat curPos;
     cv::eigen2cv(nonlinear_transformation, curPos);
     T = Mat::eye(4, 4, CV_64F);
     curPos.copyTo(T(cv::Range(0, 3), cv::Range(0, 4)));
-
 
 
     // get the last estimated pose WRT world into WTp
@@ -2971,10 +2501,6 @@ int FrontEnd::poseFromSeventeenPt(MultiCameraFrame* lf_prev, MultiCameraFrame* l
     unique_lock<mutex> lock(mMutexPose);
     Mat WTc =  WTp*T;
     T = WTc.clone();
-    // cout<<"Previous pose: "<<WTp<<endl;
-    // cout<<"POSE ESTIMATED FROM SEVENTEEN WRT world: "<<endl;
-    // cout<<T<<endl;
-    // cout<<"translation :"<< cv::norm(t_p - T(cv::Range(0, 3), cv::Range(3, 4)))<<endl;
 
     for(size_t i = 0; i < ransac.inliers_.size(); i++)
         inliers[ransac.inliers_[i]] = true;
@@ -3009,13 +2535,8 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
         IntraMatch iMatch_cur = lf_cur->intraMatches[m.trainIdx];
         for (int i =0; i <currentFrame->num_cams_ ; i++){
             if(iMatch_cur.matchIndex[i] != -1){
-//                if(lf_prev->intraMatches[m.queryIdx].matchIndex[i] == -1){
-//                    VLOG(2)<<"This is a non overlapping setup and the kp match is found in a different camera";
-//                    break;
-//                }
 
                 Point2f uv_coord = lf_cur->image_kps_undist[i][iMatch_cur.matchIndex[i]].pt;
-                //camconfig_.K_mats_[i].inv();
                 double norm_x = (uv_coord.x - camconfig_.K_mats_[i].at<double>(0,2))/camconfig_.K_mats_[i].at<double>(0,0);
                 double norm_y = (uv_coord.y - camconfig_.K_mats_[i].at<double>(1,2)) / camconfig_.K_mats_[i].at<double>(1,1);
                 Eigen::Vector3d pt_n;
@@ -3035,7 +2556,6 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
     inliers = vector<bool>(matches.size(),false);
     vector<bool> ransac_inliers = vector<bool>(matches.size(),false);
     int num_inliers =0;
-    //drawInterMatches(lf_prev, lf_cur, matches_fil, vector<bool>(matches_fil.size(),true), "InterMatches");
     //create a non-central absolute adapter
     absolute_pose::NoncentralAbsoluteAdapter adapter(
             bearingVectors,
@@ -3051,9 +2571,9 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
             sac_problems::absolute_pose::AbsolutePoseSacProblem> ransac;
     std::shared_ptr<sac_problems::absolute_pose::AbsolutePoseSacProblem> absposeproblem_ptr(
             new sac_problems::absolute_pose::AbsolutePoseSacProblem( adapter,
-                    sac_problems::absolute_pose::AbsolutePoseSacProblem::GP3P));
+                    sac_problems::absolute_pose::AbsolutePoseSacProblem::GP3P, ransac_random_seed_));
     ransac.sac_model_ = absposeproblem_ptr;
-    ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/camconfig_.K_mats_[0].at<double>(0,2)));
+    ransac.threshold_ = trackingRansacThreshold();
     ransac.max_iterations_ = 100; // 50 for imu_integrate
 
 
@@ -3061,7 +2581,6 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
     struct timeval tic;
     struct timeval toc;
     gettimeofday( &tic, 0 );
-    // VLOG(1) << " RANSAC in  absolutePoseFromGP3P" << std::endl;
     ransac.computeModel();
     gettimeofday( &toc, 0 );
     double ransac_time = TIMETODOUBLE(timeval_minus(toc,tic));
@@ -3074,10 +2593,6 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
     VLOG(3) << ransac_time << " seconds" << std::endl << std::endl;
     VLOG(3) << "the number of inliers is: " << ransac.inliers_.size();
     VLOG(3) << std::endl << std::endl;
-    //VLOG(3) << "the found inliers are: " << std::endl;
-    //for(size_t i = 0; i < ransac.inliers_.size(); i++)
-    //    VLOG(3) << ransac.inliers_[i] << " ";
-    //VLOG(3) << std::endl << std::endl;
 
     for(size_t i = 0; i < ransac.inliers_.size(); i++){
         ransac_inliers[ransac.inliers_[i]] = true;
@@ -3090,18 +2605,14 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
     T = Mat::eye(4, 4, CV_64F);
     curPos.copyTo(T(cv::Range(0, 3), cv::Range(0, 4)));
     VLOG(2)<<"Ransac Done";
-    //drawInterMatches(lf_prev, lf_cur, matches, inliers, "InterMatches");
 
     ///////////// Optimization //////////////////////
 
     if(initialized_ == INITIALIZED) {
-        //cv::cv2eigen(lf_prev->pose.rowRange(0, 3), nonlinear_transformation);
         OptimizePose(matches, lf_prev->lIds, inliers, nonlinear_transformation, T);
         VLOG(2)<<"Optimization done";
     }
-    ////////////////////////////////////////////////
 
-    //drawInterMatches(lf_prev, lf_cur, matches, inliers, "InterMatches");
 
     for(int i=0; i <inliers.size(); i++){
         if(inliers[i])
@@ -3110,8 +2621,6 @@ int FrontEnd::absolutePoseFromGP3P(MultiCameraFrame* lf_prev, MultiCameraFrame* 
     VLOG(2)<<"Ransac Inliers: "<<ransac.inliers_.size()<<endl;
     VLOG(2)<<"Optimization inliers :"<<num_inliers<<endl;
     if(ransac.inliers_.size() > num_inliers){ // this block was not there in imu_integrate
-       //drawInterMatches(lf_prev, lf_cur, matches, ransac_inliers, "InterMatches-Ransac");
-       // drawInterMatches(lf_prev, lf_cur, matches, inliers, "InterMatches-optimization");
        inliers = ransac_inliers;
        cv::eigen2cv(nonlinear_transformation, curPos);
        T = Mat::eye(4, 4, CV_64F);
@@ -3197,7 +2706,6 @@ int FrontEnd::triangulateNeighbors(std::map<int, MultiCameraFrame*>& kfMap, std:
         double baseline = norm(twc - t_neigh_wc);
         if(baseline/medianDepth < 0.01)
             continue;
-//        VLOG(0) << "Time taken in findInterMatchesBow: "<<duration_cast<milliseconds>(stopT2 - startT2).count();
         // Filter out the matches
 
         // 1. if the neighbor's matched feature is already assigned a map point
@@ -3210,8 +2718,6 @@ int FrontEnd::triangulateNeighbors(std::map<int, MultiCameraFrame*>& kfMap, std:
         auto stopT3 = high_resolution_clock::now();
         VLOG(0) << "Time taken in triangulateMatches inside triangulateNeighbhors: "<<duration_cast<milliseconds>(stopT3 - startT3).count();
         /// A method which takes the frames, matches and inliers and draws them on images for nov, ov
-//        if(num > 0)
-//            drawInterMatches(kf, currentFrame, inter_matches, inliers, "Old triangulations");
         // triangulate if all the tests have passed
         VLOG(0)<<"Number of triangulated points old KF "<<kf->frameId<<" current Kf  "<<currentFrame->frameId<<" : "<<num;
         num_triangulated = num + num_triangulated;
@@ -3224,39 +2730,29 @@ int FrontEnd::triangulateNeighbors(std::map<int, MultiCameraFrame*>& kfMap, std:
     return num_triangulated;
 }
 
-void FrontEnd::searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
-                               vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors, std::map<int, vector<DMatch>>& interMatches) {
+void FrontEnd::searchLocalMap2(MultiCameraFrame *prevKF, const vector<DMatch> &inter_matches_with_landmarks, const vector<bool> &inliers,
+                               vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors) {
     // get the set of KeyFrames in which the current inliers have been seen
-    std::set<MultiCameraFrame*> kfSet;
     std::map<int, MultiCameraFrame*> kfMap;
-    std::set<Landmark*> matchedlmset;
+    std::unordered_set<Landmark*> matchedlmset;
     vector<bool> matchedFeatsCurFrame = vector<bool>(currentFrame->intraMatches.size(),false);
     vector<DMatch> allMapMatches;
+    vector<bool> allMapInliers;
     // get the descriptors of the current frame
     vector<Mat> img_desc2;
-    cv::Mat img_desc2_mat;
-    vector<cv::KeyPoint> kps2;
-    auto start0 = high_resolution_clock::now();
-    for (auto d :currentFrame->intraMatches){
+    img_desc2.reserve(currentFrame->intraMatches.size());
+    for (const auto &d : currentFrame->intraMatches)
         img_desc2.push_back(d.matchDesc);
-        img_desc2_mat.push_back(d.matchDesc);
-        kps2.push_back(KeyPoint(d.uv_ref, 3.0));
-    }
-    auto stop0 = high_resolution_clock::now();
-    VLOG(0) << "Time taken in searchLocalMap2 getting image desc: "<<duration_cast<milliseconds>(stop0 - start0).count();
-    // for each feature in current KF, if the vector of lid matches is empty it is not matched yet
-    vector<bool> localMapInliers, allMapInliers;
-    int old_inlier_lms = 0;
-    auto start1 = high_resolution_clock::now();
-    for(int i=0; i <inter_matches_with_landmarks.size(); i++){
+
+    // Landmarks already matched through the previous keyframe are inliers of the local map as well.
+    for(size_t i=0; i <inter_matches_with_landmarks.size(); i++){
         if(inliers[i]) {
-            DMatch m = inter_matches_with_landmarks[i];
+            const DMatch &m = inter_matches_with_landmarks[i];
             int l_id = prevKF->lIds[m.queryIdx];
-            vector<MultiCameraFrame*> observedKFs = map->getLandmark(l_id)->KFs;
-            for(auto& obkf: observedKFs)
-                kfMap.insert(pair<int, MultiCameraFrame*>(obkf->kfID , obkf));
-            std::copy(observedKFs.begin(), observedKFs.end(), std::inserter(kfSet, kfSet.end()));
-            matchedlmset.insert(map->getLandmark(l_id));
+            Landmark* lm = map->getLandmark(l_id);
+            for(auto obkf: lm->KFs)
+                kfMap.emplace(obkf->kfID, obkf);
+            matchedlmset.insert(lm);
             matchedFeatsCurFrame[m.trainIdx] = true; // mark the features which have already been matched.
             alllids.push_back(l_id);
             DMatch oldm;
@@ -3266,256 +2762,127 @@ void FrontEnd::searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_ma
             allMapInliers.push_back(true);
         }
     }
-    auto stop1 = high_resolution_clock::now();
-    VLOG(0) << "Time taken in searchLocalMap2 getting allMapMatches: "<<duration_cast<milliseconds>(stop1 - start1).count();
-
-
-    old_inlier_lms = alllids.size();
-    // grab the KFset and the lmset that are not already matched
+    const int old_inlier_lms = alllids.size();
     VLOG(2)<<"Number of older inliers"<<old_inlier_lms;
-    VLOG(2)<<"Number of neghbor Keyframes"<<kfSet.size();
+    VLOG(2)<<"Number of neghbor Keyframes"<<kfMap.size();
+    neighbors = kfMap;
 
-    //Get the landmarks that have been observed in the above keyframe set
-    Mat Tcw = currentFrame->pose.inv();
-    Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
-    Mat tcw = Tcw.col(3).rowRange(0,3);
-    std::set<Landmark*> lmSet;
-    // Collect the descriptors of all the valid landmnarks
+    // World to component camera transforms and component camera centers in the world frame.
+    // Computed once per frame so the per-landmark frustum test below does not allocate.
+    struct CamProj { cv::Matx33d R_cw, K; cv::Vec3d t_cw, C_w; };
+    vector<CamProj> cams(currentFrame->num_cams_);
+    {
+        Mat Tcw = currentFrame->pose.inv();
+        cv::Matx33d R_bw(Mat(Tcw.rowRange(0,3).colRange(0,3)));
+        cv::Vec3d t_bw(Tcw.at<double>(0,3), Tcw.at<double>(1,3), Tcw.at<double>(2,3));
+        for(int camID = 0; camID < currentFrame->num_cams_ ; camID++) {
+            cv::Matx33d R_cb(camconfig_.R_mats_[camID]);
+            cv::Vec3d t_cb(camconfig_.t_mats_[camID].at<double>(0), camconfig_.t_mats_[camID].at<double>(1),
+                           camconfig_.t_mats_[camID].at<double>(2));
+            CamProj &c = cams[camID];
+            c.R_cw = R_cb * R_bw;
+            c.t_cw = R_cb * t_bw + t_cb;
+            c.K = cv::Matx33d(camconfig_.K_mats_[camID]);
+            c.C_w = -(c.R_cw.t() * c.t_cw);
+        }
+    }
+    const double u_max = camconfig_.im_size_.width - 30, v_max = camconfig_.im_size_.height - 30;
+
+    // Collect the landmarks of the neighbor keyframes that project into the current frame
+    std::unordered_set<Landmark*> lmSet;
     std::vector<cv::Mat> newlm_vecDescs;
-    vector<cv::KeyPoint> kps1;
     vector<int> new_lids;
     vector<vector<int>> lm_projected_cam_ids;
-    // construct the component camera poses in world frame
-    vector<Mat> W_T_cur_vec;
-    for(int camID = 0; camID < currentFrame->num_cams_ ; camID++) {
-        Mat cur_T_ref = Mat::eye(4, 4, CV_64F);
-        camconfig_.R_mats_[camID].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(0, 3)));
-        camconfig_.t_mats_[camID].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(3, 4)));
-        Mat W_T_cur = currentFrame->pose * cur_T_ref.inv();
-        W_T_cur_vec.push_back(W_T_cur.clone());
-    }
-
-    neighbors = kfMap;
-    /// Storing the neighboring keyframes and the matches between them and the current frame
-    std::map<int, MultiCameraFrame*>::iterator it;
-    std::vector<cv::Mat> unmatechFeaturesVecDescs;
-    cv::Mat unmatechFeaturesVecDescsMat;
-    vector<int> trueIndices;
-    vector<int> kFIdofUnmatchedMatches;
     auto start2 = high_resolution_clock::now();
-    for(it = kfMap.begin() ; it != kfMap.end() ; ++it){
-        MultiCameraFrame* kf = it->second;
-        // find the inter matches between the current frame and the neighboring keyframe and store it in a vector<vector<DMatch>>
-        vector<DMatch> inter_matches;
-        set<DBoW2::NodeId> words;
-        // create a vector to store the feature descriptors of features that do not have landmarks associated with them
-        // these descriptors will be used to match with the descriptors of the features in current frame and triangulate them if possible
-//        findInterMatchesBow(kf, currentFrame, inter_matches, false);
-//        pair<int, vector<DMatch>> p(it->first, inter_matches);
-//        interMatches.insert(p);
-        for(int i =0; i <kf->lIds.size(); i++){
-            if(kf->lIds[i] != -1){
-                Landmark* lmark = map->getLandmark(kf->lIds[i]);
-                //check if it is already processed
-                //check if it is already matched with some feature in this frame
-                // If this landmark is already added to the lm->current feature matches move on
-                if ( lmSet.find(lmark) == lmSet.end() and matchedlmset.find(lmark) == matchedlmset.end()){
-
-                    lmSet.insert(lmark);
-                    // check if it is in the frustum of the current frame
-                    Mat pt3d_body = Rcw * lmark->pt3D + tcw;
-                    bool acceptlm = false;
-                    //Check if the landmark will be seen in the current frame.
-                    vector<int> cmids;
-                    for(int camID = 0; camID < currentFrame->num_cams_ ; camID++) {
-                        Mat pt3d_c = camconfig_.R_mats_[camID] * pt3d_body + camconfig_.t_mats_[camID];
-                        double z = pt3d_c.at<double>(2, 0);
-                        if (z < 0) // negative depth
-                            continue;
-                        // if the landmark's normal has a very different view angle dont consider it
-                        Mat curDir = lmark->pt3D - W_T_cur_vec[camID].rowRange(0,3).colRange(3,4);
-                        if(lmark->normal.dot(curDir) < 0.5*cv::norm(curDir))
-                            continue;
-                        // project the landmark into the camera and check the bounds
-                        Mat tmp = camconfig_.K_mats_[camID] * pt3d_c;
-                        tmp = tmp / tmp.at<double>(2, 0);
-                        if (tmp.at<double>(0, 0) < 30 || tmp.at<double>(0, 0) > (camconfig_.im_size_.width - 30))
-                            continue;
-                        if (tmp.at<double>(1, 0) < 30 || tmp.at<double>(1, 0) > (camconfig_.im_size_.height - 30))
-                            continue;
-                        /// Check the angle of the normal of the landmark and the current camera observations
-
-                        // This is a valid landmark visible in this camera frame
-                        // accept lm will remain false if the landmark is not seen in any of the cameras
-                        // if it atleast in the frustum of one camera we can accept it
-                        cmids.push_back(camID);
-                        acceptlm = true;
-                    }
-                    if(acceptlm){
-                        // get the descriptor of this landmark for further matching
-                        // for convenienjce we take the descriptor of the latest KF
-                        MultiCameraFrame* kf = lmark->KFs.back();
-                        IntraMatch im1 = kf->intraMatches[lmark->featInds.back()];
-                        newlm_vecDescs.push_back(im1.matchDesc);
-                        //pt3dVec.push_back(lm->pt3D);
-                        new_lids.push_back(lmark->lId);
-                        lm_projected_cam_ids.push_back(cmids);
-                        alllids.push_back(lmark->lId);
-                        kps1.push_back(KeyPoint(im1.uv_ref, 3.0));
-
-
-                    }
-                }
-
+    for(const auto &kv : kfMap){
+        MultiCameraFrame* kf = kv.second;
+        for(int lid : kf->lIds){
+            if(lid == -1)
+                continue;
+            Landmark* lmark = map->getLandmark(lid);
+            // skip landmarks already processed or already matched with a feature in this frame
+            if (matchedlmset.count(lmark) or !lmSet.insert(lmark).second)
+                continue;
+            const cv::Vec3d pw(lmark->pt3D.at<double>(0), lmark->pt3D.at<double>(1), lmark->pt3D.at<double>(2));
+            const cv::Vec3d nw(lmark->normal.at<double>(0), lmark->normal.at<double>(1), lmark->normal.at<double>(2));
+            //Check if the landmark will be seen in any of the component cameras.
+            vector<int> cmids;
+            for(int camID = 0; camID < currentFrame->num_cams_ ; camID++) {
+                const CamProj &c = cams[camID];
+                const cv::Vec3d pc = c.R_cw * pw + c.t_cw;
+                if (pc[2] < 0) // negative depth
+                    continue;
+                // if the landmark's normal has a very different view angle dont consider it
+                const cv::Vec3d curDir = pw - c.C_w;
+                if(nw.dot(curDir) < 0.5*cv::norm(curDir))
+                    continue;
+                // project the landmark into the camera and check the bounds
+                const cv::Vec3d uv = c.K * pc;
+                const double u = uv[0] / uv[2], v = uv[1] / uv[2];
+                if (u < 30 || u > u_max || v < 30 || v > v_max)
+                    continue;
+                cmids.push_back(camID);
             }
-            else{
-                // this feature doesn't have a landmark associated with it
-                // add it to the vector of unmatched features
-                // for convenienjce we take the descriptor of the latest KF
-                IntraMatch im1 = kf->intraMatches[i];
-                unmatechFeaturesVecDescs.push_back(im1.matchDesc);
-                unmatechFeaturesVecDescsMat.push_back(im1.matchDesc);
-                trueIndices.push_back(i);
-                kFIdofUnmatchedMatches.push_back(kf->kfID);
+            if(!cmids.empty()){
+                // for convenience we take the descriptor of the latest KF
+                const IntraMatch &im1 = lmark->KFs.back()->intraMatches[lmark->featInds.back()];
+                newlm_vecDescs.push_back(im1.matchDesc);
+                new_lids.push_back(lmark->lId);
+                lm_projected_cam_ids.push_back(std::move(cmids));
+                alllids.push_back(lmark->lId);
             }
         }
     }
     auto stop2 = high_resolution_clock::now();
     VLOG(0) << "Time taken to searchlocalmap2 getting all landmarks for loop : "<<duration_cast<milliseconds>(stop2 - start2).count();
-
-    VLOG(0) << "Number of rows in unmatched features: "<<unmatechFeaturesVecDescsMat.rows;
-    auto start3 = high_resolution_clock::now();
-    // convert the unmatched features into bag of words
-    DBoW2::BowVector unmatchedFeaturesBoW;
-    DBoW2::FeatureVector unmatchedFeaturesFeatVec;
-    fbow::fBow unmatchedBowVector;
-    fbow::fBow2 unmatchedFeatVec;
-    fbow::fBow currentFrameBowVector;
-    fbow::fBow2 currentFrameFeatVec;
-    // convert the current frame into bow vector and feature vector using fbow
-    auto start7 = high_resolution_clock::now();
-    orb_vocabulary_fbow->transform(img_desc2_mat,4,currentFrameBowVector,currentFrameFeatVec);
-//    orb_vocabulary->transform(unmatechFeaturesVecDescs, unmatchedFeaturesBoW, unmatchedFeaturesFeatVec, 4);
-    orb_vocabulary_fbow->transform(unmatechFeaturesVecDescsMat,4,unmatchedBowVector,unmatchedFeatVec);
-    auto stop7 = high_resolution_clock::now();
-    VLOG(0) << "Time taken to transform unmatched features into bow: "<<duration_cast<milliseconds>(stop7 - start7).count();
-
-    // match the unmatched features with features in the current frame
-    auto start6 = high_resolution_clock::now();
-    vector<unsigned int> unmatchedInd1, unmatchedInd2;
-//    InterMatchingBow(unmatchedFeaturesFeatVec, currentFrame->lfFeatVec, unmatechFeaturesVecDescs, img_desc2, unmatchedInd1, unmatchedInd2);
-    InterMatchingFBow(unmatchedFeatVec, currentFrameFeatVec, unmatechFeaturesVecDescs, img_desc2, unmatchedInd1, unmatchedInd2);
-    auto stop6 = high_resolution_clock::now();
-
-    vector<DMatch> unmatchedMatches;
-    auto start8 = high_resolution_clock::now();
-    for (int i = 0; i < unmatchedInd1.size(); i++) {
-        DMatch m;
-        m.queryIdx = trueIndices[unmatchedInd1[i]];
-        m.trainIdx = unmatchedInd2[i];
-        interMatches[kFIdofUnmatchedMatches[unmatchedInd1[i]]].push_back(m);
-    }
-    auto stop8 = high_resolution_clock::now();
-    VLOG(0) << "Time taken to create unmatched matches : "<<duration_cast<milliseconds>(stop8 - start8).count();
-    auto stop3 = high_resolution_clock::now();
-    VLOG(0) << "Time taken to match unmatched features with current frame: "<<duration_cast<milliseconds>(stop3 - start3).count();
-
-
     VLOG(2)<<"Number of local map points found"<<lmSet.size();
-
     VLOG(2) << "Number of accepted Landmarks new : " << new_lids.size();
 
-    // transform all the decriptors of the accepted landmarks into BoW v ectors for matching
+    // transform all the decriptors of the accepted landmarks into BoW vectors for matching
+    auto start3 = high_resolution_clock::now();
     DBoW2::BowVector new_lmBoW;
     DBoW2::FeatureVector new_lmFeatVec;
-
     orb_vocabulary->transform(newlm_vecDescs, new_lmBoW, new_lmFeatVec, 4);
-
-
     vector<unsigned int> ind1, ind2;
     //Match the landmark descriptors with the current frame descriptors
     InterMatchingBow(new_lmFeatVec, currentFrame->lfFeatVec, newlm_vecDescs, img_desc2 , ind1, ind2 );
-    ///filter matches accoriding to the viewing camera
-
-
-    //VISUALIZE NEW MAP MATCHES
+    auto stop3 = high_resolution_clock::now();
+    VLOG(0) << "Time taken to bow-match local map landmarks: "<<duration_cast<milliseconds>(stop3 - start3).count();
     VLOG(2)<<"Number of new landmark matches:"<<ind1.size()<<endl;
     assert(ind1.size() == ind2.size());
-    vector<vector<vector<DMatch>>> vizMatches(currentFrame->num_cams_,vector<vector<DMatch>>(currentFrame->num_cams_, vector<DMatch>()));
-    vector<DMatch> matches;
 
+    ///filter matches according to the viewing camera
     auto start4 = high_resolution_clock::now();
-    for(int i=0; i<ind1.size(); i++){
+    for(size_t i=0; i<ind1.size(); i++){
         // if the matched feature in current frame is not already matched only then add it as a new match
         // We could additionally check if this is a good match than what has been matched before. but not doing that right now.
-        if( !matchedFeatsCurFrame[ind2[i]]){
-            DMatch m;
-            m.queryIdx = ind1[i];
-            m.trainIdx = ind2[i];
-
-            Landmark* lm = map->getLandmark(new_lids[m.queryIdx]);
-            MultiCameraFrame* prevKF = map->getLandmark(new_lids[m.queryIdx])->KFs.back();
-            //assert (prevKF->frameId == lfFrames.back()->frameId);
-            IntraMatch im1 = prevKF->intraMatches[lm->featInds.back()];
-            IntraMatch im2 = currentFrame->intraMatches[m.trainIdx];
-            int ii=0, ii2=0;
-            if (im1.mono){
-                ii=0;
-                for(int featInd : im1.matchIndex){
-                    if(featInd != -1)
-                        break;
-                    ii++;
-                }
-                assert(ii != prevKF->num_cams_);
-
-            }
-
-            if(im2.mono){
-                for(int featInd : im2.matchIndex){
-                    if(featInd != -1)
-                        break;
-                    ii2++;
-                }
-                assert(ii2 != currentFrame->num_cams_);
-            }
-            if(im1.mono and im2.mono) {
-                for(auto cid: lm_projected_cam_ids[ind1[i]]) {
-                    if(cid == ii2){
-                        matches.push_back(m);
-                        vizMatches[ii][ii2].push_back(m);
-                        DMatch m2;
-                        m2.queryIdx = old_inlier_lms + ind1[i];
-                        m2.trainIdx = ind2[i];
-                        allMapMatches.push_back(m2);
-                        allMapInliers.push_back(false);
-                    }
-
-                }
+        if(matchedFeatsCurFrame[ind2[i]])
+            continue;
+        Landmark* lm = map->getLandmark(new_lids[ind1[i]]);
+        const IntraMatch &im1 = lm->KFs.back()->intraMatches[lm->featInds.back()];
+        const IntraMatch &im2 = currentFrame->intraMatches[ind2[i]];
+        if(!(im1.mono and im2.mono))
+            continue;
+        // component camera in which the mono feature of the current frame is seen
+        int ii2=0;
+        for(int featInd : im2.matchIndex){
+            if(featInd != -1)
+                break;
+            ii2++;
+        }
+        assert(ii2 != currentFrame->num_cams_);
+        for(auto cid: lm_projected_cam_ids[ind1[i]]) {
+            if(cid == ii2){
+                DMatch m2;
+                m2.queryIdx = old_inlier_lms + ind1[i];
+                m2.trainIdx = ind2[i];
+                allMapMatches.push_back(m2);
+                allMapInliers.push_back(false);
             }
         }
-
     }
     auto stop4 = high_resolution_clock::now();
     VLOG(0) << "Time taken to match new landmarks with current frame: "<<duration_cast<milliseconds>(stop4 - start4).count();
-
-//
-//        Mat img_matches_mono;
-//        Mat mask = cv::Mat::zeros(matches.size(),1,CV_8UC1);
-//        mask = mask *255;
-//        std::shared_ptr<MultiCameraFrame> lf_prev = lfFrames.back();
-//        for(int i=0; i <currentFrame->num_cams_; i++){
-//            for(int j=0; j < currentFrame->num_cams_; j++){
-//                Mat img_matches_mono;
-//                cv::drawMatches(lf_prev->imgs[i], kps1, currentFrame->imgs[j], kps2, vizMatches[i][j], img_matches_mono, Scalar::all(-1),
-//                                Scalar::all(-1),vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-//
-//                ///draw the inatrmatch 2D points as well
-//                ////-- Show detected matches
-//                imshow("Inter Matches"+to_string(i)+to_string(j), img_matches_mono);
-//                waitKey(0);
-//            }
-//        }
-
 
     auto start5 = high_resolution_clock::now();
     transformation_t poseIn;
@@ -3524,12 +2891,11 @@ void FrontEnd::searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_ma
     OptimizePose(allMapMatches, alllids, allMapInliers, poseIn, refinedPose );
 
     int num_inliers=0;
-    for(int i=0; i <allMapInliers.size(); i++){
+    for(size_t i=0; i <allMapInliers.size(); i++){
         if(allMapInliers[i]){
             num_inliers++;
             inlierAllMapMatches.push_back(allMapMatches[i]);
         }
-
     }
     if ((num_inliers - old_inlier_lms) > 10){
         currentFrame->pose = refinedPose.clone();
@@ -3538,308 +2904,68 @@ void FrontEnd::searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_ma
         VLOG(1)<<"Refined Pose from localMap: "<<refinedPose<<endl;
     }
     else{
-        //reszet to older inliers
-        inlierAllMapMatches.clear();
-        inlierAllMapMatches.insert(inlierAllMapMatches.end(), allMapMatches.begin(), next(allMapMatches.begin()+old_inlier_lms));
+        // reset to the older inliers
+        inlierAllMapMatches.assign(allMapMatches.begin(), allMapMatches.begin() + old_inlier_lms);
         VLOG(0)<<"Not enough inliers in local Map. Pose remains as it is: "<<currentFrame->pose<<endl;
     }
     auto stop5 = high_resolution_clock::now();
     VLOG(0) << "Time taken to optimize pose: "<<duration_cast<milliseconds>(stop5 - start5).count();
+}
 
+void FrontEnd::matchNeighborUnmatchedFeatures(const std::map<int, MultiCameraFrame*>& neighbors,
+                                              std::map<int, vector<DMatch>>& interMatches) {
+    auto start = high_resolution_clock::now();
+    vector<Mat> img_desc2;
+    cv::Mat img_desc2_mat;
+    img_desc2.reserve(currentFrame->intraMatches.size());
+    for (const auto &d : currentFrame->intraMatches){
+        img_desc2.push_back(d.matchDesc);
+        img_desc2_mat.push_back(d.matchDesc);
+    }
+    // descriptors of the neighbor keyframe features that do not have landmarks associated with them
+    std::vector<cv::Mat> unmatchedDescs;
+    vector<int> trueIndices, kfIds;
+    size_t total = 0;
+    for(const auto &kv : neighbors)
+        total += kv.second->lIds.size();
+    unmatchedDescs.reserve(total);
+    trueIndices.reserve(total);
+    kfIds.reserve(total);
+    for(const auto &kv : neighbors){
+        const MultiCameraFrame* kf = kv.second;
+        for(size_t i =0; i <kf->lIds.size(); i++){
+            if(kf->lIds[i] == -1){
+                unmatchedDescs.push_back(kf->intraMatches[i].matchDesc);
+                trueIndices.push_back(i);
+                kfIds.push_back(kf->kfID);
+            }
+        }
+    }
+    VLOG(0) << "Number of rows in unmatched features: "<<unmatchedDescs.size();
+    if(unmatchedDescs.empty() or img_desc2.empty())
+        return;
+    cv::Mat unmatchedDescsMat;
+    cv::vconcat(unmatchedDescs, unmatchedDescsMat);
+
+    fbow::fBow unmatchedBowVector, currentFrameBowVector;
+    fbow::fBow2 unmatchedFeatVec, currentFrameFeatVec;
+    orb_vocabulary_fbow->transform(img_desc2_mat,4,currentFrameBowVector,currentFrameFeatVec);
+    orb_vocabulary_fbow->transform(unmatchedDescsMat,4,unmatchedBowVector,unmatchedFeatVec);
+
+    vector<unsigned int> unmatchedInd1, unmatchedInd2;
+    InterMatchingFBow(unmatchedFeatVec, currentFrameFeatVec, unmatchedDescs, img_desc2, unmatchedInd1, unmatchedInd2);
+    for (size_t i = 0; i < unmatchedInd1.size(); i++) {
+        DMatch m;
+        m.queryIdx = trueIndices[unmatchedInd1[i]];
+        m.trainIdx = unmatchedInd2[i];
+        interMatches[kfIds[unmatchedInd1[i]]].push_back(m);
+    }
+    auto stop = high_resolution_clock::now();
+    VLOG(0) << "Time taken to match unmatched features with current frame: "<<duration_cast<milliseconds>(stop - start).count();
 }
 
 /////////////////////////////////// optimization stufff /////////////////////////////////////////////////
-//int FrontEnd::triangulateNeighbors(std::map<int, MultiCameraFrame*> kfMap, vector<double>& depthVec){
-//    Mat Tcw = currentFrame->pose.inv();
-//    Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
-//    Mat tcw = Tcw.col(3).rowRange(0,3);
-//    Mat twc = currentFrame->pose.col(3).rowRange(0,3);
-//    std::map<int, MultiCameraFrame*>::reverse_iterator it;
-//    int num_triangulated=0;
-//    for(it = kfMap.rbegin() ; it != kfMap.rend() ; ++it){
-//        MultiCameraFrame* kf = it->second;
-//        // Check if there is enough baseline between the current keyframe and this neighbor
-//        Mat R_neigh_wc = kf->pose.rowRange(0,3).colRange(0,3);
-//        Mat t_neigh_wc = kf->pose.col(3).rowRange(0,3);
-//        double medianDepth = getSceneDepthStats(kf);
-//        double baseline = norm(twc - t_neigh_wc);
-//        if(baseline/medianDepth < 0.01)
-//            continue;
-//        //Find matches between the current frame and the neighboring keyframe except for the previous one
-//        std::vector<DMatch> inter_matches;
-//        auto start = high_resolution_clock::now();
-//        findInterMatchesBow(kf, currentFrame, inter_matches, false);
-//        auto stop = high_resolution_clock::now();
-//        auto duration = duration_cast<milliseconds>(stop - start);
-//        VLOG(0)<<"Time taken for matching with neighbor KF: "<<duration.count()<<" ms";
-//        // Filter out the matches
-//
-//        // 1. if the neighbor's matched feature is already assigned a map point
-//        //2. if the matched feature in the current frame already has a map point
-//        // if both the features are not alreadu triangulated, checl the epipolar constraints
-//        vector<bool> inliers;
-//        vector<Mat> triangulatedPts;
-//        int num = triangulateMatches(kf, currentFrame, inter_matches, inliers, triangulatedPts, depthVec);
-//        /// A method which takes the frames, matches and inliers and draws them on images for nov, ov
-////        if(num > 0)
-////            drawInterMatches(kf, currentFrame, inter_matches, inliers, "Old triangulations");
-//        // triangulate if all the tests have passed
-//        VLOG(2)<<"Number of triangulated points old KF "<<kf->frameId<<" : "<<num;
-//        num_triangulated = num + num_triangulated;
-//        // Make sure the reprojection error is minimum and the cos parallax is withion the bounds
-//
-//        // create a new map point , insert into the map and the observations
-//    }
-//    return num_triangulated;
-//}
-//
-//void FrontEnd::searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
-//                         vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors) {
-//    // get the set of KeyFrames in which the current inliers have been seen
-//    std::set<MultiCameraFrame*> kfSet;
-//    std::map<int, MultiCameraFrame*> kfMap;
-//    std::set<Landmark*> matchedlmset;
-//    vector<bool> matchedFeatsCurFrame = vector<bool>(currentFrame->intraMatches.size(),false);
-//    vector<DMatch> allMapMatches;
-//    // for each feature in current KF, if the vector of lid matches is empty it is not matched yet
-//    //
-//    vector<bool> localMapInliers, allMapInliers;
-//    int old_inlier_lms = 0;
-//    for(int i=0; i <inter_matches_with_landmarks.size(); i++){
-//        if(inliers[i]) {
-//            DMatch m = inter_matches_with_landmarks[i];
-//            int l_id = prevKF->lIds[m.queryIdx];
-//            vector<MultiCameraFrame*> observedKFs = map->getLandmark(l_id)->KFs;
-//            for(auto& obkf: observedKFs)
-//                kfMap.insert(pair<int,MultiCameraFrame*>(obkf->kfID , obkf));
-//            std::copy(observedKFs.begin(), observedKFs.end(), std::inserter(kfSet, kfSet.end()));
-//            matchedlmset.insert(map->getLandmark(l_id));
-//            matchedFeatsCurFrame[m.trainIdx] = true; // mark the features which have already been matched.
-//            alllids.push_back(l_id);
-//            DMatch oldm;
-//            oldm.queryIdx = (alllids.size()-1);
-//            oldm.trainIdx = m.trainIdx;
-//            allMapMatches.push_back(oldm);
-//            allMapInliers.push_back(true);
-//        }
-//    }
-//
-//
-//    old_inlier_lms = alllids.size();
-//    // grab the KFset and the lmset that are not already matched
-//    VLOG(2)<<"Number of older inliers"<<old_inlier_lms;
-//    VLOG(2)<<"Number of neghbor Keyframes"<<kfSet.size();
-//
-//    //Get the landmarks that have been observed in the above keyframe set
-//    Mat Tcw = currentFrame->pose.inv();
-//    Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
-//    Mat tcw = Tcw.col(3).rowRange(0,3);
-//    std::set<Landmark*> lmSet;
-//    // Collect the descriptors of all the valid landmnarks
-//    std::vector<cv::Mat> newlm_vecDescs;
-//    vector<cv::KeyPoint> kps1;
-//    vector<int> new_lids;
-//    vector<vector<int>> lm_projected_cam_ids;
-//    // construct the component camera poses in world frame
-//    vector<Mat> W_T_cur_vec;
-//    for(int camID = 0; camID < currentFrame->num_cams_ ; camID++) {
-//        Mat cur_T_ref = Mat::eye(4, 4, CV_64F);
-//        camconfig_.R_mats_[camID].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(0, 3)));
-//        camconfig_.t_mats_[camID].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(3, 4)));
-//        Mat W_T_cur = currentFrame->pose * cur_T_ref.inv();
-//        W_T_cur_vec.push_back(W_T_cur.clone());
-//    }
-//
-//    /// Storing the neighboring keyframes
-//    neighbors = kfMap;
-//    std::map<int, MultiCameraFrame*>::iterator it;
-//    for(it = kfMap.begin() ; it != kfMap.end() ; ++it){
-//        MultiCameraFrame* kf = it->second;
-//        for(int i =0; i <kf->lIds.size(); i++){
-//            if(kf->lIds[i] != -1){
-//                Landmark* lmark = map->getLandmark(kf->lIds[i]);
-//                //check if it is already processed
-//                //check if it is already matched with some feature in this frame
-//                // If this landmark iints already added to the lm->current feature matches move on
-//                if ( lmSet.find(lmark) == lmSet.end() and matchedlmset.find(lmark) == matchedlmset.end()){
-//
-//                    lmSet.insert(lmark);
-//                    // check if it is in the frustum of the current frame
-//                    Mat pt3d_body = Rcw * lmark->pt3D + tcw;
-//                    bool acceptlm = false;
-//                    //Check if the landmark will be seen in the current frame.
-//                    vector<int> cmids;
-//                    for(int camID = 0; camID < currentFrame->num_cams_ ; camID++) {
-//                        Mat pt3d_c = camconfig_.R_mats_[camID] * pt3d_body + camconfig_.t_mats_[camID];
-//                        double z = pt3d_c.at<double>(2, 0);
-//                        if (z < 0) // negative depth
-//                            continue;
-//                        // if the landmark's normal has a very different view angle dont consider it
-//                        Mat curDir = lmark->pt3D - W_T_cur_vec[camID].rowRange(0,3).colRange(3,4);
-//                        if(lmark->normal.dot(curDir) < 0.5*cv::norm(curDir))
-//                            continue;
-//                        // project the landmark into the camera and check the bounds
-//                        Mat tmp = camconfig_.K_mats_[camID] * pt3d_c;
-//                        tmp = tmp / tmp.at<double>(2, 0);
-//                        if (tmp.at<double>(0, 0) < 30 || tmp.at<double>(0, 0) > (camconfig_.im_size_.width - 30))
-//                            continue;
-//                        if (tmp.at<double>(1, 0) < 30 || tmp.at<double>(1, 0) > (camconfig_.im_size_.height - 30))
-//                            continue;
-//                        /// Check the angle of the normal of the landmark and the current camera observations
-//
-//                        // This is a valid landmark visible in this camera frame
-//                        // accept lm will remain false if the landmark is not seen in any of the cameras
-//                        // if it atleast in the frustum of one camera we can accept it
-//                        cmids.push_back(camID);
-//                        acceptlm = true;
-//                    }
-//                    if(acceptlm){
-//                        // get the descriptor of this landmark for further matching
-//                        // for convenienjce we take the descriptor of the latest KF
-//                        MultiCameraFrame* kf = lmark->KFs.back();
-//                        IntraMatch im1 = kf->intraMatches[lmark->featInds.back()];
-//                        newlm_vecDescs.push_back(im1.matchDesc);
-//                        //pt3dVec.push_back(lm->pt3D);
-//                        new_lids.push_back(lmark->lId);
-//                        lm_projected_cam_ids.push_back(cmids);
-//                        alllids.push_back(lmark->lId);
-//                        kps1.push_back(KeyPoint(im1.uv_ref, 3.0));
-//
-//                    }
-//                }
-//
-//            }
-//        }
-//    }
-//    VLOG(2)<<"Number of local map points found"<<lmSet.size();
-//
-//    VLOG(2) << "Number of accepted Landmarks new : " << new_lids.size();
-//
-//    // transform all the decriptors of the accepted landmarks into BoW vectors for matching
-//    DBoW2::BowVector new_lmBoW;
-//    DBoW2::FeatureVector new_lmFeatVec;
-//
-//    orb_vocabulary->transform(newlm_vecDescs, new_lmBoW, new_lmFeatVec, 4);
-//    vector<Mat> img_desc2;
-//    vector<cv::KeyPoint> kps2;
-//    for (auto d :currentFrame->intraMatches){
-//        img_desc2.push_back(d.matchDesc);
-//        kps2.push_back(KeyPoint(d.uv_ref, 3.0));
-//    }
-//
-//    vector<unsigned int> ind1, ind2;
-//    //Match the landmark descriptors with the current frame descriptors
-//    auto start = std::chrono::high_resolution_clock::now();
-//    InterMatchingBow(new_lmFeatVec, currentFrame->lfFeatVec, newlm_vecDescs, img_desc2 , ind1, ind2 );
-//    auto finish = std::chrono::high_resolution_clock::now();
-//    auto elapsed = duration_cast<milliseconds>(finish - start);
-//    VLOG(0) << "Elapsed time for matching lm descs with curr frame descs: " << elapsed.count();
-//    ///filter matches accoriding to the viewing camera
-//
-//
-//    //VISUALIZE NEW MAP MATCHES
-//                    VLOG(2)<<"Number of new landmark matches:"<<ind1.size()<<endl;
-//    assert(ind1.size() == ind2.size());
-//    vector<vector<vector<DMatch>>> vizMatches(currentFrame->num_cams_,vector<vector<DMatch>>(currentFrame->num_cams_, vector<DMatch>()));
-//    vector<DMatch> matches;
-//
-//    for(int i=0; i<ind1.size(); i++){
-//        // if the matched feature in current frame is not already matched only then add it as a new match
-//        // We could additionally check if this is a good match than what has been matched before. but not doing that right now.
-//        if( !matchedFeatsCurFrame[ind2[i]]){
-//            DMatch m;
-//            m.queryIdx = ind1[i];
-//            m.trainIdx = ind2[i];
-//
-//            Landmark* lm = map->getLandmark(new_lids[m.queryIdx]);
-//            MultiCameraFrame* prevKF = map->getLandmark(new_lids[m.queryIdx])->KFs.back();
-//            //assert (prevKF->frameId == lfFrames.back()->frameId);
-//            IntraMatch im1 = prevKF->intraMatches[lm->featInds.back()];
-//            IntraMatch im2 = currentFrame->intraMatches[m.trainIdx];
-//            int ii=0, ii2=0;
-//            if (im1.mono){
-//                ii=0;
-//                for(int featInd : im1.matchIndex){
-//                    if(featInd != -1)
-//                        break;
-//                    ii++;
-//                }
-//                assert(ii != prevKF->num_cams_);
-//
-//            }
-//
-//            if(im2.mono){
-//                for(int featInd : im2.matchIndex){
-//                    if(featInd != -1)
-//                        break;
-//                    ii2++;
-//                }
-//                assert(ii2 != currentFrame->num_cams_);
-//            }
-//            if(im1.mono and im2.mono) {
-//                for(auto cid: lm_projected_cam_ids[ind1[i]]) {
-//                    if(cid == ii2){
-//                        matches.push_back(m);
-//                        vizMatches[ii][ii2].push_back(m);
-//                        DMatch m2;
-//                        m2.queryIdx = old_inlier_lms + ind1[i];
-//                        m2.trainIdx = ind2[i];
-//                        allMapMatches.push_back(m2);
-//                        allMapInliers.push_back(false);
-//                    }
-//
-//                }
-//            }
-//        }
-//
-//    }
-//
-////
-////        Mat img_matches_mono;
-////        Mat mask = cv::Mat::zeros(matches.size(),1,CV_8UC1);
-////        mask = mask *255;
-////        MultiCameraFrame* lf_prev = lfFrames.back();
-////        for(int i=0; i <currentFrame->num_cams_; i++){
-////            for(int j=0; j < currentFrame->num_cams_; j++){
-////                Mat img_matches_mono;
-////                cv::drawMatches(lf_prev->imgs[i], kps1, currentFrame->imgs[j], kps2, vizMatches[i][j], img_matches_mono, Scalar::all(-1),
-////                                Scalar::all(-1),vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-////
-////                ///draw the inatrmatch 2D points as well
-////                ////-- Show detected matches
-////                imshow("Inter Matches"+to_string(i)+to_string(j), img_matches_mono);
-////                waitKey(0);
-////            }
-////        }
-//
-//
-//    transformation_t poseIn;
-//    cv::cv2eigen( currentFrame->pose.rowRange(0,3), poseIn);
-//
-//    OptimizePose(allMapMatches, alllids, allMapInliers, poseIn, refinedPose );
-//
-//    int num_inliers=0;
-//    for(int i=0; i <allMapInliers.size(); i++){
-//        if(allMapInliers[i]){
-//            num_inliers++;
-//            inlierAllMapMatches.push_back(allMapMatches[i]);
-//        }
-//
-//    }
-//    if ((num_inliers - old_inlier_lms) > 10){
-//        currentFrame->pose = refinedPose.clone();
-//        VLOG(1)<<"Number of new matches in local Map : "<<(allMapMatches.size() - old_inlier_lms);
-//        VLOG(1)<<"Number of inliers in local Map : "<<(num_inliers - old_inlier_lms);
-//        VLOG(1)<<"Refined Pose from localMap: "<<refinedPose<<endl;
-//    }
-//    else{
-//        //reszet to older inliers
-//        inlierAllMapMatches.clear();
-//        inlierAllMapMatches.insert(inlierAllMapMatches.end(), allMapMatches.begin(), next(allMapMatches.begin()+old_inlier_lms));
-//        VLOG(1)<<"Not enough inliers in local Map. Pose remains as it is: "<<currentFrame->pose<<endl;
-//    }
-//
-//}
+
 
 //todo: this function is new - post merge
 int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* curFrame, vector<DMatch> inter_matches, vector<bool>& inliers,
@@ -3850,7 +2976,6 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
         camconfig_.R_mats_[c_ind].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(0, 3)));
         camconfig_.t_mats_[c_ind].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(3, 4)));
         Mat cur_T_W = cur_T_ref * prev_kf->pose.inv();
-        //Mat P1 = cv::Mat_<double>(cur_T_W(cv::Range(0,3), cv::Range(0,4)));
         ProjMats1.push_back(cur_T_W.clone());
     }
     for(int c_ind=0; c_ind < curFrame->num_cams_ ; c_ind++){
@@ -3858,30 +2983,9 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
         camconfig_.R_mats_[c_ind].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(0, 3)));
         camconfig_.t_mats_[c_ind].copyTo(cur_T_ref(cv::Range(0, 3), cv::Range(3, 4)));
         Mat cur_T_W = cur_T_ref * curFrame->pose.inv();
-       // Mat P1 = cv::Mat_<double>(cur_T_W(cv::Range(0,3), cv::Range(0,4)));
         ProjMats2.push_back(cur_T_W.clone());
     }
-//    VLOG(2)<<"Prev KF pose: "<<prev_kf->pose;
-//    VLOG(2)<<"Current KF pose: "<<curFrame->pose;
-//    VLOG(2)<<"Current KF pose: "<<currentFrame->pose;
     /// Filter matched based on epipolar constraint ///ASUMOTION RIGHT NOWE IS that it is monocular or non-overlapping
-//    for(int i =0; i < curFrame->num_cams_ ; i++){
-//        int c1=i;
-//        int c2=i;
-//        Mat cam_T_ref = Mat::eye(4, 4, CV_64F);
-//        camconfig_.R_mats_[i].copyTo(cam_T_ref(cv::Range(0, 3), cv::Range(0, 3)));
-//        camconfig_.t_mats_[i].copyTo(cam_T_ref(cv::Range(0, 3), cv::Range(3, 4)));
-//        Mat cam_T_W1 = cam_T_ref * prev_kf->pose.inv();
-//
-//        Mat cam_T_W2 = cam_T_ref * currentFrame->pose.inv();
-//
-//        Mat Tji = cam_T_W2 * cam_T_W1.inv();
-//        Mat t_ji_x =  (Mat_<double>(3,3) << 0, -Tji.at<double>(2,3), Tji.at<double>(1,3),
-//                Tji.at<double>(2,3), 0, -Tji.at<double>(0,3),
-//                -Tji.at<double>(1,3), Tji.at<double>(0,3), 0);
-//        Mat F21 = camconfig_.K_mats_[c2].t().inv() * t_ji_x * Tji(cv::Range(0, 3), cv::Range(0, 3)) * camconfig_.K_mats_[c1].inv();
-//        F21s.push_back(F21.clone());
-//    }
 
   ////////////// EPIPolar constraimts///////////////
     int num_triangulated=0;
@@ -3894,9 +2998,6 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
     inliers = vector<bool>(inter_matches.size(), true);
 
     for (int i = 0 ; i < inter_matches.size(); i++){
-//        /// if the current match is an outlier move on to next
-//        if(!inliers[i])
-//            continue;
         ///Get the intramatches and their corresponding 2D observations
         DMatch m = inter_matches[i];
         // 1. if the neighbor's matched feature is already assigned a map point
@@ -3931,15 +3032,10 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
                 -Tji.at<double>(1,3), Tji.at<double>(0,3), 0);
         Mat F21 = camconfig_.K_mats_[view_inds[nextI]].t().inv() * t_ji_x * Tji(cv::Range(0, 3), cv::Range(0, 3)) * camconfig_.K_mats_[view_inds[0]].inv();
 
-        // Epipolar line in image l2 = F21 * kp1
         float a = kps[0].x * F21.at<double>(0,0)+ kps[0].y * F21.at<double>(0,1)+F21.at<double>(0,2);
         float b = kps[0].x * F21.at<double>(1,0)+ kps[0].y * F21.at<double>(1,1)+F21.at<double>(1,2);
         float c = kps[0].x * F21.at<double>(2,0)+ kps[0].y * F21.at<double>(2,1)+F21.at<double>(2,2);
 
-//                float den = a*a+b*b;
-//                den = den ? 1./std::sqrt(den) : 1.;
-//                a *= den; b *= den; c *= den;
-//                den = a*a + b*b;
 
         float num = a * kps[nextI].x + b * kps[nextI].y + c;
         float den = a*a+b*b;
@@ -3972,19 +3068,11 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
         for (auto P : PJs){
 
             int cam_ind = view_inds[jj];
-            //cout<<"landmark camrea view: "<<cam_ind<<endl;
             Mat p3d_conv = P(cv::Range(0, 3), cv::Range(0, 3)) * pt3d +  P(cv::Range(0, 3), cv::Range(3, 4));
             if(p3d_conv.at<double>(2,0) < 0){
                 inliers[i] = false;
                 break;
             }
-//                    VLOG(2)<<"3D point: "<< pt3d;
-//                    VLOG(2)<<"3D point converted: "<<p3d_conv;
-//                    VLOG(2)<<"Proj Mat: "<<P;
-//                    Mat tmp = Mat::eye(4, 4, CV_64F);
-//                    P.copyTo(tmp(cv::Range(0, 3), cv::Range(0, 4)));
-//                    VLOG(2)<<"Proj inverse this shuld be equal to pose:"<<tmp.inv();
-//                    VLOG(2)<<"Kp: "<<kps[jj];
 
             Mat projected = camconfig_.K_mats_[cam_ind] * p3d_conv;
             double expected_x = projected.at<double>(0,0) / projected.at<double>(2,0);
@@ -3999,7 +3087,6 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
 
         }
 
-        // cout<<"--------------------"<<endl;
         if(inliers[i]){
             // Check parallax
             cv::Mat normal1 = pt3d - o1;
@@ -4011,7 +3098,6 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
             double cosParallax = normal1.dot(normal2)/(dist1*dist2);
 
             if(cosParallax < 0.99998 and cosParallax > 0.5) { //
-                //drawInterMatch(prev_kf, currentFrame, prev_kf->intraMatches[m.queryIdx],currentFrame->intraMatches[m.trainIdx], "inlier triangulation");
 
                 triangulatedPts[i] = pt3d;
                 num_triangulated++;
@@ -4030,12 +3116,6 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
         }
 
     }
-//    sort(depthVec.begin(),depthVec.end());
-//    size_t idx = depthVec.size()/2;
-//    median_scene_depth = depthVec[idx];
-//    VLOG(2)<<"Number of triangulated points old: "<<num_triangulated;
-//    VLOG(2)<<"Average depth of the triangulated points Old: "<<avg_depth/num_triangulated;
-//    VLOG(2)<<"Median depth of the triangulated points old : "<<median_scene_depth;
     return num_triangulated;
 }
 
@@ -4043,15 +3123,6 @@ int FrontEnd::triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* cu
 bool FrontEnd::trackFrame(){
     bool viz_track = false;
     log_KF_ =0;
-    Mat all;
-    //////////////  This //////////////////////////////////////
-    all.create(currentFrame->imgs[0].rows, currentFrame->imgs[0].cols * currentFrame->num_cams_, CV_8UC3);
-    for(int i=0; i < camconfig_.num_cams_ ; i++){
-        Mat imgBGR;
-        cvtColor(currentFrame->imgs[i],imgBGR , COLOR_GRAY2BGR);
-        imgBGR.copyTo(all.colRange(camconfig_.im_size_.width*i, camconfig_.im_size_.width*(i+1)));
-
-    }
     /// grab the current frame
     MultiCameraFrame* lf_cur = currentFrame;
 
@@ -4067,7 +3138,6 @@ bool FrontEnd::trackFrame(){
         }
         else{
             num_frames_since_tracking_failure =0;
-            // we need to re-initiaze the vision part;
             initialized_ = REINITIALIZING;
             return false;
         }
@@ -4088,9 +3158,7 @@ bool FrontEnd::trackFrame(){
             break;
         }
     }
-//    prev_KF = lfFrames.back();
 
-    // VLOG(1)<<"------------------- NEW FRAME --------------------"<<endl;
     VLOG(1)<<"Number of landmarks: "<<prev_KF->numTrackedLMs<<endl;
 
     auto startT = high_resolution_clock::now();
@@ -4148,8 +3216,6 @@ bool FrontEnd::trackFrame(){
     T = Mat::eye(4, 4, CV_64F);
     /// find pose of the light field frame using 3D-3d PC alignment
     vector<bool> inliers;
-    //VLOG(2)<<"trackFrame before estimate pose"<<endl;
-    // startT = high_resolution_clock::now();
     int num_inliers = 0;
     int num_inliers_refKF=0;
 
@@ -4157,14 +3223,6 @@ bool FrontEnd::trackFrame(){
     num_inliers = estimatePoseLF(prev_KF, lf_cur, inter_matches_with_landmarks, inliers, T, false );
 
 
-    // auto stopT = high_resolution_clock::now();
-    // auto duration = duration_cast<milliseconds>(stopT - startT);
-    // VLOG(2)<<"Time taken for pose estimation : "<<duration.count()<<endl;
-
-    // VLOG(2) << "Total Number of intermatches "<<inter_matches.size()<<endl;
-    // VLOG(2) << "Number of inter_matches_with_landmarks : "<<inter_matches_with_landmarks.size()<<endl;
-    // VLOG(2) << "Number of new intermatches : "<<new_inter_matches.size()<<endl;
-    // VLOG(1) << "Number of tracked landmarks : " << num_inliers << ","<<(float)num_inliers/prev_KF->numTrackedLMs<<endl;
     VLOG(1) << "Number of tracked landmarks : " << num_inliers <<endl;
     log_num_intramatches_ = currentFrame->intraMatches.size();
     log_num_matches_ = inter_matches.size() ;
@@ -4176,45 +3234,19 @@ bool FrontEnd::trackFrame(){
     int pp=0;
     double tracking_parallax =0.0;
     vector<double> tracking_depthVec;
-    Mat Tcw = currentFrame->pose.inv();
+    // depths w.r.t. the pose just estimated (currentFrame->pose is not set yet at this point)
+    Mat Tcw = T.inv();
     Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
     Mat tcw = Tcw.col(3).rowRange(0,3);
     for(auto& m : inter_matches_with_landmarks){
         if(inliers[pp]){
-            IntraMatch im2 = lf_cur->intraMatches[m.trainIdx];
-
             int l_id = prev_KF->lIds[m.queryIdx];
             Mat pt3d= map->getLandmark(l_id)->pt3D;
             Mat pt3d_body = Rcw * pt3d + tcw;
             tracking_depthVec.push_back(pt3d_body.at<double>(2,0));
-
-            Point2f p2;
-            int camIndCur=0;
-            Scalar cc;
-            if(im2.mono){
-                cc=  Scalar(0,255,0);
-            }
-            else{
-
-                cc=Scalar(0,0,255);
-            }
-            for(int featInd: im2.matchIndex){
-                if(featInd != -1){
-                    p2 = lf_cur->image_kps_undist[camIndCur][featInd].pt;
-                    cv::circle(all,p2+Point2f(camIndCur * camconfig_.im_size_.width, 0),4,cc, 2);
-                }
-                camIndCur++;
-            }
-
         }
         pp++;
     }
-    cv::resize(all,all,cv::Size(camconfig_.im_size_.width * lf_cur->num_cams_/2, camconfig_.im_size_.height/2));
-    cv::imshow("images", all);
-    //if(currentFrame->frameId < 5)
-   //     cv::waitKey(0);
-   // else
-        // cv::waitKey(4);
     VLOG(0)<<"Number of inliers in the pose estimation: "<<num_inliers<<endl;
     if (num_inliers < 10){
         deleteCurrentFrame();
@@ -4229,8 +3261,8 @@ bool FrontEnd::trackFrame(){
     /// no need of transform chaining
 
     currentFrame->pose = T.clone();
+    last_tracked_pose_ = T.clone();
 
-    // VLOG(2) << "Initial Pose estimate "<< currentFrame->pose <<endl;
 
     Mat relativePose = prev_KF->pose.col(3) - T.col(3);
     double baseline = norm(relativePose);
@@ -4247,8 +3279,6 @@ bool FrontEnd::trackFrame(){
     double rotation = abs(atan2(-1 * relative_transformation.at<double>(2,0),
                                 sqrt(pow(relative_transformation.at<double>(2,1), 2) +
                                      pow(relative_transformation.at<double>(2,2), 2)))) *  (180.0/3.141592653589793238463);
-    // VLOG(2)<<" translation: "<<baseline<<endl;
-    // VLOG(2)<<" rot angle: "<<rotation<<", gamma: "<<gamma<<endl;
     /////////////////// Check if this has a potential to be inserted as a keyframe ////////////////////////////
     /// 1. number of tracked points
     /// 2. number of tracked close points
@@ -4270,18 +3300,17 @@ bool FrontEnd::trackFrame(){
     // todo: githb : new addition post merge
     std::map<int, MultiCameraFrame*> neighbors;
     std::map<int, vector<DMatch>> inter_matches_with_landmarks_map;
-//    searchLocalMap2(prev_KF, inter_matches_with_landmarks, inliers, allMapMatchesInliers, refinedPose, allLids,neighbors);
-    searchLocalMap2(prev_KF, inter_matches_with_landmarks, inliers, allMapMatchesInliers, refinedPose, allLids,neighbors, inter_matches_with_landmarks_map);
+    searchLocalMap2(prev_KF, inter_matches_with_landmarks, inliers, allMapMatchesInliers, refinedPose, allLids,neighbors);
+    last_tracked_pose_ = currentFrame->pose.clone();
     auto stopT = high_resolution_clock::now();
     auto durationS = duration_cast<milliseconds>(stopT - startT);
     VLOG(0)<<"Time taken to run search local Map and optimize :"<<durationS.count()<<endl;
 
     // check: currentframe->pose is being set properly inside the searchlocalmap2 function. we shouldnt uncomment here
-    // currentFrame->pose = refinedPose.clone();
     ///////////////// Get the local map points from neighboring keyframes and refine the matches as well as pose estimates//////////////////////
 
-    //Mat all;
     if(viz_track){
+        Mat all;
         vector<cv::KeyPoint> kps1, kps2;
         int ind = 0;
         for (auto &d : prev_KF->intraMatches) {
@@ -4338,9 +3367,6 @@ bool FrontEnd::trackFrame(){
                 p1 = im1.uv_ref;
             }
 
-            //cv::circle(all,p2+Point2f(camIndCur * camconfig_.im_size_.width, 0),3,Scalar(0,170,30), 2);
-            //if(p1.x !=0 and p1.y != 0)
-            //    cv::arrowedLine(all, p1+ Point2f(camIndCur * camconfig_.im_size_.width, 0), p2+Point2f(camIndCur * camconfig_.im_size_.width, 0), Scalar(0,170,30), 2);
         }
 
         for (int i =0; i < allMapMatchesInliers.size(); i++) {
@@ -4356,12 +3382,6 @@ bool FrontEnd::trackFrame(){
 
         }
     }
-    cv::resize(all,all,cv::Size(camconfig_.im_size_.width * lf_cur->num_cams_/2, camconfig_.im_size_.height/2));
-    cv::imshow("images", all);
-    // if(currentFrame->frameId < 5)
-    //     cv::waitKey(0);
-    // else
-    //     cv::waitKey(0);
 
     ///we can get the inliers (featids in current frame) through reprojection error check as well. Right now
     /// we are only sticking with 3D-3D error within PCAlignment method
@@ -4383,8 +3403,6 @@ bool FrontEnd::trackFrame(){
     rotation = abs(atan2(-1 * relative_transformation.at<double>(2,0),
                                 sqrt(pow(relative_transformation.at<double>(2,1), 2) +
                                      pow(relative_transformation.at<double>(2,2), 2)))) *  (180.0/3.141592653589793238463);
-    // VLOG(2)<<" translation: "<<baseline<<endl;
-    // VLOG(2)<<" rot angle: "<<rotation<<", gamma: "<<gamma<<endl;
 
     if (num_inliers == 0){
         VLOG(0)<<"Inliers 0 after local map otimization. Should not come here";
@@ -4393,7 +3411,6 @@ bool FrontEnd::trackFrame(){
         return ret;
     }
 
-    //std::vector<char> inliers_triangulated, outliers_triangulated;
     num_inliers_refKF = num_inliers;
     /// Conditions for key frame insertion
     cond1 = (float)num_inliers/prev_KF->numTrackedLMs <= 0.4 && (baseline >= kf_translation_threshold || rotation >= kf_rotation_threshold);
@@ -4401,7 +3418,6 @@ bool FrontEnd::trackFrame(){
     cond2 = !cond1 and  num_inliers < 0.3 * prev_KF->numTrackedLMs; //cond2 = !cond1 and  num_inliers < 35; for imu_integrate
     num_inliers = allMapMatchesInliers.size();
     bool cond3 = baseline/med_tracked_depth > 0.01;
-    //LOGGING
     VLOG(2)<<"cond1: "<<cond1<<" cond2: "<<cond2<<" cond3 : "<<cond3;
     vector<int> n_rays (currentFrame->num_cams_, 0);
     if(cond1 or cond2  ) {
@@ -4416,7 +3432,6 @@ bool FrontEnd::trackFrame(){
             Landmark* lm = map->getLandmark(l_id);
             lm->addLfFrame(lf_cur, m.trainIdx, lf_cur->intraMatches[m.trainIdx].uv_ref);
             lf_cur->lIds[m.trainIdx] = l_id;
-            //VLOG(2)<<"lm normal update: "<<lm->normal;
             ///logging
             n_rays[ lf_cur->intraMatches[m.trainIdx].n_rays - 1]++;
         }
@@ -4428,13 +3443,9 @@ bool FrontEnd::trackFrame(){
         ///////////////////////////////////////////////////////////////////////////
 
         /////////////triangulate using our older method////////////////
-//        vector<bool> tri_inliers_old(new_inter_matches.size(), true);
-//        vector<Mat> triangulatedPtsOld;
-//        triangulateMatches(prev_KF, lf_cur, new_inter_matches, tri_inliers_old, triangulatedPtsOld);
-        ////////////////////////////////////////////////////////////////
         auto startT1 = high_resolution_clock::now();
+        matchNeighborUnmatchedFeatures(neighbors, inter_matches_with_landmarks_map);
         int num_triangulated = mapping(currentFrame, prev_KF, new_inter_matches, neighbors, inter_matches_with_landmarks_map, num_triangulated, n_rays);
-//        int num_triangulated = mapping(currentFrame, prev_KF, new_inter_matches, neighbors, num_triangulated, n_rays);
         auto stopT1 = high_resolution_clock::now();
         auto durationT1 = duration_cast<milliseconds>(stopT1 - startT1);
         VLOG(0)<<"Time taken for mapping new lms is: " << durationT1.count() << endl;
@@ -4476,7 +3487,6 @@ bool FrontEnd::trackFrame(){
 
 
         ret = true;
-        //////////////////////////////////////////////////////////////////////////
 
     }
 
@@ -4486,16 +3496,6 @@ bool FrontEnd::trackFrame(){
     std::string s = ss.str();
     VLOG(3)<<s<<endl;
 
-//    if(useGPS){
-//        if(lfFrames.back()->dummy_kf){
-//            if(lf_cur->timeStamp - lfFrames.back()->timeStamp < 0.01){
-//                VLOG(0) <<" Curr frame very close to prev dummy kf !!!!! ";
-//                ret = false;
-//                VLOG(0) << " ========= ";
-//            }
-//        }
-//
-//    }
 
     if(!ret)
         deleteCurrentFrame();
@@ -4503,8 +3503,6 @@ bool FrontEnd::trackFrame(){
     return ret;
 }
 
-//int FrontEnd::mapping(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF, const vector<DMatch> &new_inter_matches,
-//                      std::map<int, MultiCameraFrame *> &neighbors, int num_triangulated, vector<int> &n_rays) {
 int FrontEnd::mapping(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF, const vector<DMatch> &new_inter_matches,
                       std::map<int, MultiCameraFrame *> &neighbors, std::map<int, vector<DMatch>>& interMatches,int num_triangulated, vector<int> &n_rays) {
     vector<double> depthVec;
@@ -4520,7 +3518,6 @@ int FrontEnd::mapping(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF,
     int num_tri_old = 0;
     VLOG(0) <<"Number of total intermatches: " << interMatches.size();
     num_tri_old = triangulateNeighbors(neighbors, interMatches, depthVec);
-//    num_tri_old = triangulateNeighbors(neighbors, depthVec);
 
     log_num_triangulated_ = num_triangulated + num_tri_old;
     log_KF_=1;
@@ -4541,10 +3538,6 @@ int FrontEnd::mapping(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF,
     med_depth = depthVec[idx];
     VLOG(2) << "Median Depth of triangulate points: " << med_depth;
 
-    //if( num_triangulated < 20){
-//    VLOG(2)<<"Not enough landmarks have been created. BAD Frame";
-//    return false;
-//}
     insertKeyFrame();
     return num_triangulated + num_tri_old;
 }
@@ -4615,7 +3608,6 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
 
                 LevenbergMarquardtParams params;
                 params.verbosityLM = LevenbergMarquardtParams::SUMMARY;
-//                params.verbosity = NonlinearOptimizerParams::ERROR;
                 params.lambdaInitial = 1;
                 params.lambdaFactor = 10;
                 params.maxIterations = 50;
@@ -4632,7 +3624,6 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
                     try{
                         result = LevenbergMarquardtOptimizer(graph, initialEstimate, params).optimize();
 
-                        //cout << "Triangulation final error- iter:"<<iter<<" = " << graph.error(result) << endl;
                         gtsam::Point3 curest = result.at<gtsam::Point3>(Symbol('P', 0));
                         for(int facInd =0 ; facInd < graph.size(); facInd++) {
                             if (graph.at(facInd)) {
@@ -4642,16 +3633,10 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
                                 gtsam::Point2 errVec = fac->evaluateError(curest);
                                 gtsam::Matrix infMat = gtsam::Matrix::Identity(2,2) * orBextractor->GetInverseScaleSigmaSquares()[ octaves[facInd]];
                                 double error = dot(errVec, infMat*errVec );
-                                //double error = dot(errVec, errVec);
                                 if (error > 5.991) {
                                     // this is an outlier. mark it
                                     triangulation_inliers[i] = false;
                                     cnt_big_chi_err++;
-//                                        if(compCamInds[0] == 2){
-//                                            drawInterMatch(prev_KF, currentFrame, prev_KF->intraMatches[m.queryIdx],currentFrame->intraMatches[m.trainIdx], "Traingulation Error");
-//                                            VLOG(2)<<"Big chi-square error in triangulation"<<error;
-//                                            VLOG(2)<<"triangulated cameras: "<<compCamInds[0]<<","<<compCamInds[1]<<"  Size: "<<compCamInds.size();
-//                                        }
 
                                     break;
 
@@ -4662,12 +3647,6 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
 
                     }
                     catch(gtsam::CheiralityException e){
-//                            if(compCamInds[0] == 2){
-//                                drawInterMatch(prev_KF, currentFrame, prev_KF->intraMatches[m.queryIdx],currentFrame->intraMatches[m.trainIdx], "Traingulation Error");
-//                                VLOG(2)<<"Cheirality Exception at "<< e.nearbyVariable();
-//                                VLOG(2)<<"triangulated cameras: "<<compCamInds[0]<<","<<compCamInds[1]<<"  Size: "<<compCamInds.size();
-//
-//                            }
 
                         triangulation_inliers[i] = false;
                         break;
@@ -4691,12 +3670,6 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
                     {
                         triangulation_inliers[i] = false;
                         cnt_less_parallax++;
-//                            if(compCamInds[0] == 2){
-//                                drawInterMatch(prev_KF, currentFrame, prev_KF->intraMatches[m.queryIdx],currentFrame->intraMatches[m.trainIdx], "Traingulation Error");
-//                                VLOG(2)<<"Not enough motion between frames based on parallax";
-//                                VLOG(2)<<"triangulated cameras: "<<compCamInds[0]<<","<<compCamInds[1]<<"  Size: "<<compCamInds.size();
-//                                VLOG(2)<<"dist1: "<<dist1<<" Dist2: "<<dist<<" Parallax: "<<cosParallax;
-//                            }
 
                     }
                     else{
@@ -4707,7 +3680,6 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
 
                 }
 
-                ////////////////////////////////////////////////////////////
             }
             else{
 
@@ -4737,7 +3709,6 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
         }
         else{
             triangulation_inliers[i] = false;
-            //VLOG(2)<<"Invalid Tri result";
             if(TriResult.Degenerate())
                 VLOG(2)<<"Degenerate: "<<TriResult.degenerate();
             if(TriResult.BehindCamera()){
@@ -4750,18 +3721,11 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
             else if(TriResult.FarPoint())
                 VLOG(2)<<"Far POint: "<<TriResult.farPoint();
 
-//                if(compCamInds[0] == 2){
-//                    drawInterMatch(prev_KF, currentFrame, prev_KF->intraMatches[m.queryIdx],currentFrame->intraMatches[m.trainIdx], "Traingulation Error");
-//                    VLOG(2)<<"triangulated cameras: "<<compCamInds[0]<<","<<compCamInds[1]<<"  Size: "<<compCamInds.size();
-//                }
 
         }
 
         if(triangulation_inliers[i]){
 
-            //Eigen::Vector3d pt;
-            //for(int j=0; j<3; ++j)
-            //    pt[j] = pt3d.at<double>(j,0);
             //create Landmarks for each inlier and insert them into global map and well as
             // the keyframes.
             int l_id = map->insertLandmark(pt3d, prev_KF, m.queryIdx, prev_KF->intraMatches[m.queryIdx].uv_ref);
@@ -4786,66 +3750,11 @@ void FrontEnd::TriangulateNewLandmarks(const MultiCameraFrame *lf_cur, MultiCame
     VLOG(2) << "Number of intramatch feature already assigned to landmarks points: " << cnt_already_assigned_lm;
 }
 
+
 //////////////////////////////////////////////////////////////////////
 /////////////// VISUALIZATION AND ANALYSIS FUNCTIONS ////////////////
 ////////////////////////////////////////////////////////////////////
 //synchronized callback
-//void FrontEnd::findLoopCandidates(vector<Mat>& images, vector<Mat>& segMasks){
-//    MultiCameraFrame* fr = new MultiCameraFrame(camconfig_) ;//new MultiCameraFrame(images, segMasks, orb_vocabulary,
-//                         // orBextractor, orBextractors, camconfig_, current_frameId++,
-//                          //0.0, false);
-//    fr->extractFeaturesParallel();
-//    fr->parseandadd_BoW();
-//
-//    /*std::vector<array<int, 5>> matches_map;
-//    vector<DBoW2::NodeId > words_;
-//    fr->computeIntraMatches(matches_map, words_);
-//
-//    std::vector<array<int, 5> > filtered_intra_matches;
-//    assert(words_.size() == matches_map.size());
-//    set<DBoW2::NodeId > filtered_words;
-//    filterIntraMatches( matches_map, fr, filtered_intra_matches, words_,filtered_words );
-//    cout<<"Total number of filetered intra matches : "<<filtered_intra_matches.size()<<endl;
-//
-//    orb_vocabulary->transform(fr->intraMatchDescs,fr->lfBoW,fr->lfFeatVec,2);*/
-//    vector<Mat> all_descriptors;
-//    for(int i =0 ; i < fr->num_cams_; i++){
-//        for(int j=0; j <fr->image_descriptors[i].size(); j++){
-//            Point2f p = fr->image_kps[i][j].pt;
-//            if(fr->segMasks[i].at<float>(p.y, p.x) < 0.7){
-//                all_descriptors.push_back(fr->image_descriptors[i][j]);
-//            }
-//        }
-//        //all_descriptors.insert(all_descriptors.end(), currentFrame->image_descriptors[i].begin(), currentFrame->image_descriptors[i].end());
-//    }
-//    DBoW2::BowVector bowVec_all;
-//    DBoW2::FeatureVector featVec_all;
-//    orb_vocabulary->transform(all_descriptors,bowVec_all,featVec_all,2);
-//
-//
-//    vector<double> scores;
-//    vector<double> stamps;
-//    // For LF frame
-//    lcLF_->queryDatabase(bowVec_all,7,scores, stamps);
-//    cout.precision(10);
-//    for(int i =0; i <scores.size(); i++){
-//        cout<<" image "<<(i+1)<<" score: "<<scores.at(i)<<" stamp: "<<stamps.at(i)<<endl;
-//    }
-//    //for monocular case
-//    DBoW2::BowVector bowVec;
-//    DBoW2::FeatureVector featVec;
-//    vector<double> scores_mono;
-//    vector<double> stamps_mono;
-//    orb_vocabulary->transform(fr->image_descriptors[2],bowVec,featVec,2);
-//    lcMono_->queryDatabase(bowVec,7,scores_mono, stamps_mono);
-//    cout.precision(10);
-//    for(int i =0; i <scores_mono.size(); i++){
-//        cout<<" image "<<(i+1)<<" score: "<<scores_mono.at(i)<<" stamp: "<<stamps_mono.at(i)<<endl;
-//    }
-//
-//
-//
-//}
 
 
 boost::json::array FrontEnd::vecToJson(const std::vector<std::vector<double>>& vec) {
@@ -5060,12 +3969,14 @@ std::vector<std::vector<double>> FrontEnd::matToVec(const cv::Mat& mat) {
     return vec;
 }
 
+
 /// This method takes key points of two images corresponding to two cameras
 /// Undistorts them returns their normalized coordinates or bearing vectors
 /// \param kps_1  : vector of key points in first image
 /// \param kps_2  : vector of key points in second image
 /// \param cam1  : index of first camera
 /// \param cam2  : index of second camera
+
 ///  IMU Pre-integration related functions
 
 Eigen::Quaterniond  FrontEnd::world_imu_frame(std::deque<mcslam::ImuSample>& imu_msgs){
@@ -5125,26 +4036,10 @@ Eigen::MatrixXd FrontEnd::kabsch(Eigen::MatrixXd A, Eigen::MatrixXd B){
    return R;
 
     // compute the centroid of each matrix
-//    Eigen::Vector3d centroid_A = A.colwise().mean();
-//    Eigen::Vector3d centroid_B = B.colwise().mean();
-//
-//    // compute the cross product of the 2 vectors to find the angle of rotation
-//    Eigen::Vector3d cross_product = centroid_A.cross(centroid_B);
-//
-//    // compute the rotation by computing the dot product of the 2 vectors
-//    double dot_product = centroid_A.dot(centroid_B);
-//
-//    // convert the axis angle representation to a quaternion
-//    Eigen::AngleAxisd angle_axis;
-//    angle_axis.angle() = acos(dot_product/(centroid_A.norm() * centroid_B.norm()));
-//    angle_axis.axis() = cross_product.normalized();
-//    Eigen::Quaterniond q(angle_axis);
-//    return q.toRotationMatrix();
 
 }
 
 void FrontEnd::imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias){
-
 
 
     // set the prior bias
@@ -5173,7 +4068,6 @@ void FrontEnd::imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias)
     double integration_sigma = 1e-8;
     params->setIntegrationCovariance( gtsam::I_3x3 * pow(integration_sigma, 2) );  //1e-8
 
-   // //error in bias
     params->biasAccOmegaInt = gtsam::I_6x6 * 1e2;// 1e-5;
 
     priorPoseNoise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad,m, m, m
@@ -5303,7 +4197,6 @@ void FrontEnd::imu_preintegration(double image_time){
     while(!imu_msgs_combined.empty()){
         double imuTime = imu_msgs_combined.front().timestamp;
 
-        // assert (imuTime < image_time) ;
         if(imuTime > image_time){
             break;
         }
@@ -5353,7 +4246,6 @@ tuple<double, double, double> FrontEnd::geodetic_to_enu(mcslam::GnssFix gps_msg)
     double lon = gps_msg.longitude;
     double alt = gps_msg.altitude;
 
-    // Alternatively: const Geocentric& earth = Geocentric::WGS84();
 
     double lat0 = refLat;
     double lon0 = refLon;
@@ -5472,8 +4364,6 @@ void FrontEnd::interpolation_vins_GPS(vector<gps_umeyama_data> gps_umeyama_data_
 }
 
 
-
-
 void FrontEnd::gps_initialize_kabsch(std::deque<mcslam::GnssFix>  gps_msgs_combined, MultiCameraFrame* vins_kf){
 
 
@@ -5583,8 +4473,6 @@ bool FrontEnd::validGPSmessage(gps_message gps_data_){
 
         if(gps_msgs_combined.front().timestamp < KF_time){
             // old message:
-//            VLOG(0) <<"gps message time " << std::setprecision(15) << gps_msgs_combined.front().timestamp;
-//            VLOG(0) <<"prev image time " << std::setprecision(15) << KF_time;
             VLOG(0) << "Old GPS message" << endl;
             gps_msgs_combined.pop_front();
             return false;
@@ -5615,11 +4503,8 @@ bool FrontEnd::validGPSmessage(gps_message gps_data_){
 }
 
 
-
-
 void FrontEnd::appendIMUValue(mcslam::ImuSample* message)
 {
-//    VLOG(0) << "Appending IMU values..." << std::endl;
     logFile2_ << "imu_raw" << " " << setprecision(20)
     << message->timestamp << " "
     << message->accel.x() << " " << message->accel.y() << " " << message->accel.z() << " "
@@ -5635,6 +4520,4 @@ void FrontEnd::appendGPSValue(gps_message gps_data_stored, int gps_kf){
     VLOG(0) << "GPS factors recorded. at time " << std::setprecision(15) <<  gps_data_stored.tStamp << std::endl;
 
 }
-
-
 

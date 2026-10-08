@@ -72,18 +72,14 @@
 #include <GeographicLib/LocalCartesian.hpp>
 
 
-
 using namespace std;
 using namespace cv;
 using namespace opengv;
 
-//#include "QueryResults.h"
 typedef fbow::Vocabulary ORBVocabularyfbow;
 typedef fbow::fBow2 bowFeatureVector;
-typedef fbow::fBow bowVector;
 typedef unsigned int NodeId;
 typedef unsigned int EntryId;
-//typedef QueryResults QueryResults;
 
 typedef gtsam::CameraSet<gtsam::PinholeCamera<gtsam::Cal3_S2>> Cameras;
 
@@ -104,17 +100,10 @@ enum INTER_MATCH{
 
 class FrontEnd: public FrontEndBase {
 public:
-    // TEST MODULE :
-    struct LOOPER_PAYLOAD
-    {
-        bool isLoop = false;
-
-    };
-
     FrontEnd(const string &strSettingsFile, CamArrayConfig &camconfig, bool debug, const string &calibFilePath,
              bool useIMU, bool useGPS, bool relocalization, string& customVoc, string& dataBase, string& graphLogs,
              string& mapLogs, bool navability, int ImuMapFrame)
-            : DEBUG_MODE(debug), useIMU(useIMU), relocal(relocalization), camconfig_(camconfig), frontend_config_file(strSettingsFile),
+            : DEBUG_MODE(debug), useIMU(useIMU), relocal(relocalization), camconfig_(camconfig),
               calib_file_path(calibFilePath), mapFile(mapLogs), dbFile(dataBase), customVocFile(customVoc),
               graphLogsFile(graphLogs), useGPS(useGPS), navability(navability), ImuMapFrame(ImuMapFrame) {
         //Check and load settings file
@@ -155,17 +144,17 @@ public:
         }
         VLOG(0) << "Vocabulary loaded!" << endl;
 
-        //init_cond_ = (INIT_COND)fSettings["InitCondition"];
-        //posestAlgo_ = (POSEST_ALGO)fSettings["PoseEstimation"];
         init_cond_=  static_cast<INIT_COND>((int)fSettings["InitCondition"]);
         posestAlgo_=  static_cast<POSEST_ALGO>((int)fSettings["PoseEstimation"]);
         interMatch_ = static_cast<INTER_MATCH>((int)fSettings["InterMatch"]);
 
         kf_translation_threshold = (double)fSettings["KFBaselineThresholdTranslation"];
-        // cout<<"kf threshold T: "<<kf_translation_threshold;
 
         kf_rotation_threshold = (double)fSettings["KFBaselineThresholdRotation"];
-        // cout<<"kf threshold R: "<<kf_rotation_threshold;
+
+        // Reprojection threshold [px] of the tracking RANSAC. Unset keeps the legacy value (~0.9 px on EuRoC).
+        if (!fSettings["Tracking.RansacThresholdPx"].empty())
+            ransac_threshold_px_ = (double)fSettings["Tracking.RansacThresholdPx"];
 
         string logDir = fSettings["LogDir"];
         boost::filesystem::path dir(logDir.c_str());
@@ -177,8 +166,6 @@ public:
         logFile_.open (dir.string());
         boost::filesystem::path dir2(logDir.c_str());
         dir2 /= logFileName2_;
-        //logFile2_.open (dir2.string());
-        //logFile_ << "Writing poses and landmarks to a file.\n";
 
         // Load ORB parameters
         int nFeatures = fSettings["ORBextractor.nFeatures"];
@@ -198,19 +185,14 @@ public:
 
         //compute the rectification homography
         currentFramePose = cv::Mat::eye(3, 4, CV_64F);
-        //currentFramePose1 = cv::Mat::eye(3, 4, CV_64F);
         currentFramePose2 = cv::Mat::eye(3, 4, CV_64F);
         current_frameId = 0;
         currentKFID = 0;
-        //initialized_ = false;
         initialized_ = NOT_INITIALIZED;
         initializationTrials = 0;
         //map object
         map = new GlobalMap();
 
-        initialized_mono_ = false;
-        currentFramePose_mono = cv::Mat::eye(3, 4, CV_64F);
-        map_mono = new GlobalMap();
 
         if(relocal)
         {
@@ -246,18 +228,14 @@ public:
         logFile2_.open(graph_logs, std::ios_base::app);
 
         EntryCount = 0;
-//        lcLF_ = new LoopCloser(orb_vocabulary);
-//        lcMono_ = new LoopCloser(orb_vocabulary);
 
         convertCamConfig_CV2GTSAM(camconfig, RT_Mats);
-        convertCamConfig_CV2GTSAM(camconfig, RT_Mats_init);
 
         clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
         sparse_recon.reserve(500);
 
 
         // imu
-        initialized_imu = NOT_INITIALIZED;
 
         if(useIMU){
             if(!calibSettings.isOpened())
@@ -318,7 +296,6 @@ public:
         /// Set the camera rig for the tracking module.
         if(relocal and useIMU)
         {
-//            //TODO: Clean this up.
             VLOG(0) << "Creating the camera rig for the tracking module ..." << std::endl;
             // Convert the K_mat to gtsam format.
             std::vector<gtsam::Matrix> K_mats_gtsam;
@@ -349,7 +326,6 @@ public:
             gtsam::Rot3 R_gtsam_rot(R_gtsam);
             Tbc_gtsam = gtsam::Pose3(R_gtsam_rot, T_gtsam);
             tracer->createCameraRig(K_mats_gtsam, R_T_mats_gtsam, Tbc_gtsam);
-            // tracer->createCameraRig(camconfig_.K_mats_, camconfig_.R_mats_, camconfig_.t_mats_, Tbc_cv);
         }
 
 
@@ -403,7 +379,6 @@ public:
 
                 VLOG(0) << endl << "Tbg" << Tbg << endl;
         }
-        // compute_overlap();
     }
 
 }
@@ -416,17 +391,17 @@ public:
 
     void compute_overlap();
     //MOno
+
     void getDataForGTSAMTriangulation(MultiCameraFrame *lf, int iMatchInd, Cameras &cameras,
                                       gtsam::Point2Vector &measurements, vector<int> &compCamInds,
                                       vector<int> &octaves);
     int triangulateMatches(MultiCameraFrame* prev_kf, MultiCameraFrame* curFrame, vector<DMatch> inter_matches, vector<bool>& inliers, vector<Mat>& triangulatedPts, vector<double>& depthVec);
     double getSceneDepthStats(MultiCameraFrame* kf);
-//    int triangulateNeighbors(std::map<int, MultiCameraFrame*> kfMap,  vector<double>& depthVec);
     int triangulateNeighbors(std::map<int, MultiCameraFrame*>& kfMap, std::map<int, vector<DMatch>>& interMatches, vector<double>& depthVec);
-    bool checkTriangulation(vector<Mat>& PJs, vector<Point2f>& kps, cv::Mat& P3D, float &parallax);
 
 
     void createFrame(vector<Mat> img_set, vector<Mat> segmap_set, double timeStamp);
+
 
     void obtainLfFeatures( std::vector<IntraMatch>& matches_map, MultiCameraFrame* currentFrame,
                            std::vector<IntraMatch>& filtered_intra_matches,
@@ -438,7 +413,6 @@ public:
     void insertKeyFrame();
     void deleteCurrentFrame();
 
-    //void BruteForceMatching(Mat img1, Mat img2, vector<Mat> descs1, vector<Mat> descs2, vector<KeyPoint> kps1, vector<KeyPoint> kps2);
     void findInterMatches(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur, std::vector<DMatch>& matches_z_filtered,
                           std::vector<DMatch>& matches_mono_z_filtered, bool viz);
     void findInterMatches(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur, std::vector<DMatch>& matches_z_filtered,
@@ -447,11 +421,11 @@ public:
                              std::vector<DMatch> &mono_matches, bool viz);
     void findInterMatchesBow(MultiCameraFrame *lf_prev, MultiCameraFrame *lf_cur, std::vector<DMatch> &matches,
                              bool viz);
-    void InterMatchingBow( DBoW2::FeatureVector lfFeatVec1, DBoW2::FeatureVector lfFeatVec2, std::vector<cv::Mat> img_desc1,
-                           std::vector<cv::Mat> img_desc2, vector<unsigned int>& indices_1,
+    void InterMatchingBow( const DBoW2::FeatureVector &lfFeatVec1, const DBoW2::FeatureVector &lfFeatVec2, const std::vector<cv::Mat> &img_desc1,
+                           const std::vector<cv::Mat> &img_desc2, vector<unsigned int>& indices_1,
                            vector<unsigned int>& indices_2);
-    void InterMatchingFBow( bowFeatureVector lfFeatVec1, bowFeatureVector lfFeatVec2, vector<Mat> img_desc1,
-                           vector<Mat> img_desc2, vector<unsigned int>& indices_1,
+    void InterMatchingFBow( const bowFeatureVector &lfFeatVec1, const bowFeatureVector &lfFeatVec2, const vector<Mat> &img_desc1,
+                           const vector<Mat> &img_desc2, vector<unsigned int>& indices_1,
                            vector<unsigned int>& indices_2);
     void InterMatchingBow(MultiCameraFrame* lf_prev, MultiCameraFrame* lf_cur, vector<unsigned int>& indices_1,
                           vector<unsigned int>& indices_2,set<DBoW2::NodeId>& words );
@@ -481,10 +455,13 @@ public:
     void reset();
 
     void writeTrajectoryToFile(const string &filename,  bool mono);
-//    void searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
-//                        vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors);
-    void searchLocalMap2(MultiCameraFrame *prevKF, vector<DMatch> inter_matches_with_landmarks, vector<bool> inliers,
-                        vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors, std::map<int, vector<DMatch>>& interMatches);
+
+
+    void searchLocalMap2(MultiCameraFrame *prevKF, const vector<DMatch> &inter_matches_with_landmarks, const vector<bool> &inliers,
+                        vector<DMatch> &inlierAllMapMatches, Mat &refinedPose, vector<int> &alllids, std::map<int, MultiCameraFrame*>& neighbors);
+    // Matches the current frame's features against the features of the neighbor keyframes that have no
+    // landmark yet. Only needed when the current frame becomes a keyframe (feeds triangulateNeighbors).
+    void matchNeighborUnmatchedFeatures(const std::map<int, MultiCameraFrame*>& neighbors, std::map<int, vector<DMatch>>& interMatches);
     void project3dPoint(const Mat &pt3d, int camInd,Mat Twb, double& exp_x, double& exp_y);
 
 
@@ -553,16 +530,8 @@ public:
     void refinePose();
 
 
-    //only for mono-comparison
-    GlobalMap* map_mono;
-    bool initialized_mono_;
-    vector<MultiCameraFrame*> lfFrames_mono;
-    vector<cv::Mat> allPoses_mono;
     vector<Mat> neighborPoses_;
-    vector<double> poseTimeStamps_mono;
-    cv::Mat currentFramePose_mono;
     int initializationTrials =0;
-    Mat prev_rvec, prev_tvec;
     bool trackingStatus = false;
 
     bool DEBUG_MODE;
@@ -571,28 +540,32 @@ public:
     POSEST_ALGO posestAlgo_ = SEVENTEEN_PT;
     INTER_MATCH interMatch_ = BoW_MATCH;
     bool tracking_failure_= false;
+    // pose of the last successfully tracked frame; vision restarts here after a tracking loss
+    cv::Mat last_tracked_pose_;
+    // false: seed every RANSAC problem with a fixed value so runs are reproducible
+    bool ransac_random_seed_ = true;
+    void setDeterministic(bool on);
     int num_frames_since_tracking_failure = 0;
     int num_trials_to_track = 2;// hardcoded, should be a parameter
 
 
     // imu
-    INIT_STATE initialized_imu = NOT_INITIALIZED;
     bool useIMU = false;
     int ImuMapFrame = 0;
     bool relocal = false;  // Bool to trigger relocalization modules.
-    bool globallyRelocalized = false;
     bool navability = false;
 
     string graph_logs = "";
 
     double kf_translation_threshold;
     double kf_rotation_threshold;
+    double ransac_threshold_px_ = -1.0;
+    double trackingRansacThreshold() const;
 
     int current_frameId, currentKFID;
     MultiCameraFrame* currentFrame;
     vector<MultiCameraFrame*> lfFrames;
     CamArrayConfig& camconfig_;
-    string frontend_config_file;
     string calib_file_path;
     string logFileName_ = "poses_landmark.txt";
     string logFileName2_ = "poses_stats.txt";
@@ -608,10 +581,9 @@ public:
     ORBVocabulary* database_vocab;
     ORBDatabase* orb_database;
     GlobalMap* map;
-    //MulticamElas* reconstructor;
 
     // Loop Closure functionalities.
-    LoopCloser* looper;
+    LoopCloser* looper = nullptr;
     LoopCloser::Detection_Frame result;
 
     Relocalization* relook;
@@ -622,31 +594,19 @@ public:
     std::string graphLogsFile;
 
 
-
-    // LoopCloser* lcMono_;
-    // LoopCloser* lcLF_;
-    // LoopCloser* lcMasked_;
-
     vector<Mat> overlap_masks;
     vector<float> non_overlap_fraction;
-    //cv::Mat currentFramePose;
     //EXtra variables for pose visualization
-    cv::Mat currentFramePose1, currentFramePose2, currentFramePose3;
+    cv::Mat currentFramePose2;
     cv::Mat Tbc_cv = cv::Mat::eye(4, 4, CV_64F);
     cv::Mat Tbc_Relocalization = cv::Mat::eye(4, 4, CV_64F);
 
-    float mapping_time=0.0;
     vector<double> poseTimeStamps;
-    vector<cv::Mat> keyFramePoses;
 
     cv::Ptr<cv::CLAHE> clahe;
 
     // opengv pose estimation stuff
-    vector<int> correspondences_1, correspondences_2;
-    opengv::bearingVectors_t bearings_1, bearings_2;
-    opengv::rotations_t rotations;
-    opengv::translations_t translations;
-    vector<gtsam::Pose3> RT_Mats, RT_Mats_init;
+    vector<gtsam::Pose3> RT_Mats;
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -654,7 +614,6 @@ public:
     float acc_n, gyr_n, acc_w, gyr_w;
     float g_norm;
     Eigen::Matrix4d Tbc = Eigen::Matrix4d::Identity();
-    Eigen::Matrix4d Tbw;
     Eigen::Quaterniond world_imu_frame(std::deque<mcslam::ImuSample>& imu_messages);
     Eigen::MatrixXd kabsch(Eigen::MatrixXd A, Eigen::MatrixXd B);
     void imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias);
@@ -663,11 +622,9 @@ public:
     void imu_preintegration(double image_time);
     bool imu_initialized = false;
     gtsam::PreintegratedCombinedMeasurements *imu_integrator_comb;
-    // gtsam::PreintegratedImuMeasurements *imu_integrator_opt;
     double last_imu_time = -1;
     gtsam::imuBias::ConstantBias prior_imu_bias;
     Eigen::Matrix3d world_imu_rotation = Eigen::Matrix3d::Zero();
-    bool done_rotation_opt = false;
     std::deque<mcslam::ImuSample> imu_msgs_initialized;
     bool first_keyframe = true;
     double prev_image_time = 0;
@@ -687,8 +644,6 @@ public:
                             const vector<DMatch> &new_inter_matches, int &num_triangulated, vector<int> &n_rays,
                             vector<double> &depthVec, double &avg_depth);
 
-//    int mapping(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF, const vector<DMatch> &new_inter_matches,
-//               std::map<int, MultiCameraFrame *> &neighbors, int num_triangulated, vector<int> &n_rays);
     int mapping(const MultiCameraFrame *lf_cur, MultiCameraFrame *prev_KF, const vector<DMatch> &new_inter_matches,
                std::map<int, MultiCameraFrame *> &neighbors, std::map<int, vector<DMatch>>& interMatches, int num_triangulated, vector<int> &n_rays);
 
@@ -701,11 +656,8 @@ public:
 
     std::deque<mcslam::GnssFix> gps_msgs_combined;
     bool gps_initialized = false;
-    std::deque<mcslam::GnssFix> gps_msgs_initialize;
-    std::deque<gtsam::Pose3> vins_poses_initialize;
     void gps_initialize_kabsch(std::deque<mcslam::GnssFix>  gps_msgs_combined, MultiCameraFrame* prev_kf);
     void gps_ENU_reference_params(mcslam::GnssFix gps_msg);
-    bool gps_init_data_Stored = false;
 
     bool useGPS = false;            // for now do it in a basic way
     tuple<double, double, double> geodetic_to_enu(mcslam::GnssFix gps_msg);
@@ -719,9 +671,6 @@ public:
     tuple<double, double, double> enu_wrt_origin(tuple<double, double, double> gps_message);
 
 
-    std::deque<tuple<double, double, double>> gps_msgs_enu;
-
-
     cv::Mat T_body_gps = cv::Mat::eye(4, 4, CV_64F);
     cv::Mat Tbg = cv::Mat::eye(4, 4, CV_64F);
 
@@ -733,7 +682,6 @@ public:
         double tStamp;
     };
     gps_message gps_data_;
-    int last_gps_kf = -1;
     bool validGPSmessage(gps_message gps_data_);
     double gps_euclidean(tuple<double, double, double> gps_msg1, tuple<double, double, double> gps_msg2);
 
@@ -746,7 +694,6 @@ public:
         double timestamp;
     };
     gps_data gps_data_stored;
-    bool gps_transform_stored = false;
 
     struct gps_umeyama_data
     {
@@ -766,9 +713,6 @@ public:
 
 
     // debug
-    int dummy_frame_tot_count = 0;
-    int dummy_frame_count = 0;
-    vector<MultiCameraFrame*> lfFrames_debug;
     bool init_mode = true;
     // final results of relocalization
     std::map<int, std::vector<cv::KeyPoint>> reprojectedKeypoints;

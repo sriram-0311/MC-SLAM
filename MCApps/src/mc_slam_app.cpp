@@ -51,6 +51,8 @@ DEFINE_string(traj_file, "Tum_trajectory.txt", "trajectory file file path");
 DEFINE_string(body_traj_file, "", "if set, also write keyframe poses of the body (IMU) frame in TUM format");
 DEFINE_string(timing_file, "", "if set, write per-frame stage timings (CSV)");
 DEFINE_int32(max_frames, 0, "stop after this many frames (0 = whole sequence)");
+DEFINE_bool(no_backend_feedback, false, "debug: do not write back-end estimates into the front-end map");
+DEFINE_bool(deterministic, false, "seed RANSAC with a fixed value so repeated runs give the same result");
 DEFINE_bool(headless, false, "run without the Pangolin viewer / keyboard loop (for benchmarks)");
 
 mcslam::FrameTiming g_timing;
@@ -102,6 +104,7 @@ int main(int argc , char** argv){
     slam_frontend = new FrontEnd(settings.frontend_params_file, *cam_cfg, settings.debug_mode, settings.calib_file_path,
                                  settings.imu, settings.gps, settings.relocalization, settings.customVocabFile,
                                  settings.dataBase, settings.graphLogs, settings.mapLogs, settings.navability, settings.ImuMapFrame);
+    slam_frontend->setDeterministic(FLAGS_deterministic);
     VLOG(0) << "slam_frontend initialized" <<endl;
     // create the SLAM backend object
     Backend *slam_backend;
@@ -661,7 +664,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
                 g_timing.optimize_us = mcslam::usBetween(startT2, stopT2);
                 auto duration2 = duration_cast<milliseconds>(stopT2 - startT2);
                 VLOG(0)<<"Total time taken for Back-end optimization: "<<duration2.count()<<endl;
-                if(update) {
+                if(update && !FLAGS_no_backend_feedback) {
 //                    backend.updateVariables();
                     auto  startT3 = high_resolution_clock::now();
                     backend.UpdateVariables_SmartFactors();
