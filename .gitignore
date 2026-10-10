@@ -139,4 +139,4 @@ install/
 CMakeUserPresets.json
 build/
 results/
-build-asan/
+build-*/
