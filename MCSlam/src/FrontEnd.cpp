@@ -513,6 +513,43 @@ void FrontEnd::processFrame() {
 
 /// Method which returns the latest estimated pose
 /// \return
+void FrontEnd::drawTrackingView(MultiCameraFrame* frame, const std::vector<DMatch>& lm_matches,
+                                const std::vector<bool>& inliers, int num_inliers){
+    const int w = camconfig_.im_size_.width, h = camconfig_.im_size_.height, bar = 28;
+    cv::Mat view(h + bar, w * frame->num_cams_, CV_8UC3, cv::Scalar(30, 30, 30));
+    for (int c = 0; c < frame->num_cams_; ++c) {
+        cv::Mat bgr;
+        cv::cvtColor(frame->imgs[c], bgr, cv::COLOR_GRAY2BGR);
+        bgr.copyTo(view(cv::Rect(c * w, bar, w, h)));
+    }
+    auto drawFeature = [&](int featIdx, const cv::Scalar& color, int radius, int thickness) {
+        const IntraMatch& im = frame->intraMatches[featIdx];
+        for (int c = 0; c < frame->num_cams_; ++c) {
+            if (im.matchIndex[c] == -1)
+                continue;
+            const cv::Point2f p = frame->image_kps[c][im.matchIndex[c]].pt;
+            cv::circle(view, p + cv::Point2f(c * w, bar), radius, color, thickness, cv::LINE_AA);
+        }
+    };
+    std::vector<bool> matched(frame->intraMatches.size(), false);
+    for (size_t i = 0; i < lm_matches.size(); ++i)
+        matched[lm_matches[i].trainIdx] = true;
+    for (size_t i = 0; i < frame->intraMatches.size(); ++i)   // new features: not matched to the map
+        if (!matched[i])
+            drawFeature(i, cv::Scalar(150, 150, 150), 1, 1);
+    for (size_t i = 0; i < lm_matches.size(); ++i) {          // map matches: inlier green, outlier red
+        const bool in = i < inliers.size() && inliers[i];
+        drawFeature(lm_matches[i].trainIdx, in ? cv::Scalar(60, 200, 60) : cv::Scalar(60, 60, 220), 3, in ? 2 : 1);
+    }
+    const bool lost = num_inliers < 10;
+    std::ostringstream os;
+    os << "frame " << frame->frameId << "   keyframes " << lfFrames.size() << "   tracked landmarks "
+       << num_inliers << "   map points " << map->mapPoints.size() << "   " << (lost ? "LOST" : "TRACKING");
+    cv::putText(view, os.str(), cv::Point(10, 19), cv::FONT_HERSHEY_SIMPLEX, 0.55,
+                lost ? cv::Scalar(80, 80, 255) : cv::Scalar(235, 235, 235), 1, cv::LINE_AA);
+    tracking_view_ = view;
+}
+
 void FrontEnd::publishMapPoints(){
     std::vector<cv::Point3f> pts;
     pts.reserve(map->mapPoints.size());
@@ -3381,6 +3418,8 @@ bool FrontEnd::trackFrame(){
         pp++;
     }
     VLOG(0)<<"Number of inliers in the pose estimation: "<<num_inliers<<endl;
+    if (show_tracking_)
+        drawTrackingView(lf_cur, inter_matches_with_landmarks, inliers, num_inliers);
     if (num_inliers < 10){
         deleteCurrentFrame();
         tracking_failure_ = true;

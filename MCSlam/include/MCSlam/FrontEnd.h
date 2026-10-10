@@ -463,6 +463,12 @@ public:
     // Landmark positions for the viewer thread: the SLAM thread publishes a snapshot after each
     // keyframe (the map itself is not safe to read concurrently).
     bool publish_map_points_ = false;
+    // Live tracking view (both cameras with tracked / rejected / new features), drawn by the SLAM
+    // thread for every tracked frame and shown by the app's main loop.
+    bool show_tracking_ = false;
+    cv::Mat tracking_view_;
+    void drawTrackingView(MultiCameraFrame* frame, const std::vector<DMatch>& lm_matches,
+                          const std::vector<bool>& inliers, int num_inliers);
     void publishMapPoints();
     std::vector<cv::Point3f> getMapPoints();
     std::vector<cv::Point3f> map_points_snapshot_;

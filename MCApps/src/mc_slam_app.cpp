@@ -121,6 +121,7 @@ int main(int argc , char** argv){
    OpenGlViewer* glViewer;
    glViewer = new OpenGlViewer(settings.frontend_params_file, slam_frontend);
    slam_frontend->publish_map_points_ = true;
+   slam_frontend->show_tracking_ = true;
    if (!settings.relocalization)
         auto *viewerThread = new thread(&OpenGlViewer::goLive, glViewer);
    else
@@ -791,6 +792,9 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
 
             if(success){
                 process_frames(frontend, backend);
+                if(frontend.show_tracking_ && !frontend.tracking_view_.empty())
+                    cv::imshow("MC-SLAM tracking (green: tracked map points, red: rejected, grey: new)",
+                               frontend.tracking_view_);
             } else{
                 // end of the sequence: keep the map on screen until the viewer window is closed
                 LOG(INFO) << "End of sequence; close the viewer window to exit";
