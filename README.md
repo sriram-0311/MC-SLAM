@@ -1,361 +1,147 @@
-# MC-SLAM: Multi-Camera Simultaneous Localization and Mapping
+# MC-SLAM: Multi-Camera SLAM
 
-<div align="center">
+Feature-based SLAM for multi-camera rigs (stereo and larger arrays), with optional IMU fusion,
+DBoW2 loop closure and global relocalization. The back end is a GTSAM factor graph (iSAM2) with
+multi-camera smart projection factors.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-blue)](https://github.com/sriram-0311/MC-SLAM)
-[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/std/the-standard)
+MC-SLAM was developed at the [NEU Field Robotics Lab](https://github.com/neufieldrobotics)
+(original author: Pushyami Kaveti). This repository is my (Anush Sriram Ramesh's) refurbished
+fork: I wrote the global relocalization, the fast tracking front end, and the pose-only factor-graph
+back end that serves it, and I have ported the system to GTSAM 4.3 and benchmarked and debugged it
+on EuRoC.
 
-*A robust multi-camera SLAM system with advanced visual odometry, loop closure detection, and sensor fusion capabilities*
+<p align="center"><img src="docs/images/viewer_mh01.png" width="560" alt="MC-SLAM map viewer on EuRoC MH_01"></p>
+<p align="center"><sub>EuRoC MH_01, stereo only: keyframe trajectory (green), landmarks (grey),
+loop-closure candidates (blue).</sub></p>
 
-</div>
+## Results on EuRoC MAV
 
----
+All 11 sequences, full length, `--deterministic`, evaluated with
+[evo](https://github.com/MichaelGrupp/evo) against the body-frame ground truth (SE(3)
+alignment, no scale correction). ATE is the RMSE of the absolute trajectory error over keyframes.
+Machine: 24-core desktop, single SLAM thread.
 
-## Key Features
+| Sequence | Stereo ATE | Stereo + IMU ATE | Stereo rot. error | Stereo + IMU rot. error |
+|---|---|---|---|---|
+| MH_01_easy | 4.0 cm | 3.7 cm | 1.1° | 1.4° |
+| MH_02_easy | **2.7 cm** | 18.8 cm | 0.6° | 2.9° |
+| MH_03_medium | **3.2 cm** | 22.8 cm | 1.2° | 1.3° |
+| MH_04_difficult | **17.6 cm** | 82.5 cm | 1.4° | 3.8° |
+| MH_05_difficult | **18.4 cm** | 36.8 cm | 1.3° | 1.9° |
+| V1_01_easy | 17.2 cm | **3.6 cm** | 6.1° | 5.5° |
+| V1_02_medium | 14.2 cm | **3.2 cm** | 3.0° | 2.1° |
+| V1_03_difficult | 35.2 cm | **11.1 cm** | 10.4° | 4.0° |
+| V2_01_easy | 5.0 cm | 4.9 cm | 1.2° | 1.0° |
+| V2_02_medium | **14.1 cm** | 41.5 cm | 2.2° | 5.3° |
+| V2_03_difficult | 179 cm | **84 cm** | 32.0° | 4.4° |
 
-### Advanced Multi-Camera Processing
-- **Multi-view stereo triangulation** with robust outlier rejection
-- **Intra-camera feature matching** across overlapping and non-overlapping camera configurations
-- **Adaptive keyframe selection** based on parallax and feature tracking quality
-- **Camera rig calibration** support with geometric constraints
+Stereo only runs at 52-114 ms per frame. The IMU helps most on the fast, rotation-heavy Vicon-room
+sequences. On the machine-hall sequences it is still less accurate than stereo alone, because
+the stereo+IMU graph triggers many failed incremental iSAM2 updates (see Known issues).
 
-### State-of-the-Art SLAM Pipeline
-- **Visual-Inertial Odometry** with IMU pre-integration using GTSAM
-- **Loop closure detection** with DBoW2 vocabulary and geometric verification  
-- **GPS-assisted localization** with Umeyama alignment for global positioning
-- **Bundle adjustment** optimization for accurate trajectory estimation
+### What changed against the original code
 
-### Robust Feature Processing
-- **ORB feature extraction** with multi-scale pyramid processing
-- **Semantic segmentation** integration to filter dynamic objects
-- **Bag-of-Words** visual place recognition for loop closure
-- **Relocalization** capabilities for tracking recovery
+At the start of this work, 9 of the 11 sequences crashed. Stereo-only MH_01 had 4.6 cm ATE and
+took 243 ms and 20 GB of RAM. It now runs at 71 ms with 4.7 GB. The main fixes, each in its own commit:
 
-### Cross-Platform Support
-- **Windows native build** with MSVC compatibility
-- **Linux build** with optional ROS integration
-- **Video stream input** supporting live cameras and video files
-- **Flexible data input** replacing ROS dependencies with OpenCV-based readers
+- **Back end:**
+  - Smart factors referenced keyframes missing from the graph after an iSAM2 reset.
+  - The reset re-anchored the graph at the first keyframe.
+  - Loop closures sent the wrong landmark-measurement pairs (an index bug).
+  - Smart-factor noise was hard-coded to 15 px with no outlier handling. It is now 1 px with GTSAM's
+    degeneracy guards.
+  - iSAM2 cached linear factors that go stale with smart factors, and new measurements mutated
+    factors that iSAM2 already holds. A failed incremental update is now re-solved in batch
+    instead of discarding the map.
+- **Front end:**
+  - The local-map search matched 65k-126k descriptors on every frame, although only new keyframes
+    need them. Tracking is 48% faster.
+  - A heap overflow in re-initialization (found with AddressSanitizer).
+  - Stereo-only tracking restarted at the origin after a tracking loss. It now restarts at the last
+    tracked pose.
+  - The keyframe rotation threshold was configured in the wrong unit.
+- **Stereo + IMU:**
+  - Initialization assumed a static start and a z-up IMU (EuRoC has neither).
+  - It is replaced by a stereo-inertial alignment that bootstraps from stereo odometry (gyro bias,
+    velocities and gravity from about 2 s of keyframes; unit tested and checked against EuRoC
+    ground truth).
+  - A 1e-16 IMU integration variance made the graph numerically singular.
+- **Tooling:**
+  - Deterministic RANSAC seeding, so runs are bit-reproducible.
+  - EuRoC reader, headless benchmark mode, per-frame timing CSV, evaluation scripts.
+  - About 3,800 lines of dead front-end code removed.
+  - The map viewer works again.
 
----
+## Building
 
-## Quick Start
+Tested on Ubuntu 24.04 with GCC 11 and CMake 3.28.
 
-### Prerequisites
+| Dependency | Version used |
+|---|---|
+| GTSAM (+ gtsam_unstable) | 4.3.0 |
+| OpenCV | 4.6 (apt) |
+| Eigen | 3.4 (apt) |
+| Boost | 1.83 (program_options, filesystem, serialization, json) |
+| OpenGV, DBoW2, DLib, DLoopDetector, fbow | master |
+| Pangolin (viewer, optional) | 0.9 |
+| glog, gflags, GeographicLib, GTest | apt |
 
-| Component | Version | Purpose | Windows | Linux |
-|-----------|---------|---------|---------|-------|
-| **OpenCV** | 4.5+ | Computer vision operations | ? | ? |
-| **Eigen3** | 3.3+ | Linear algebra computations | ? | ? |
-| **Boost** | 1.70+ | System utilities and JSON | ? | ? |
-| **MSVC 2019+** | - | Windows compiler | ? | ? |
-| **GCC/Clang** | - | Linux compiler | ? | ? |
-| **GTSAM** | 4.1+ | Factor graph optimization (optional) | ? | ? |
-| **DBoW2** | Latest | Visual vocabulary for loop closure (optional) | ? | ? |
-| **ROS** | Noetic+ | Robot Operating System (Linux only) | ? | ? |
-
-### Installation
-
-#### Windows (Visual Studio 2019+)
-```powershell
-# Using vcpkg for dependencies (recommended)
-vcpkg install opencv4:x64-windows eigen3:x64-windows boost:x64-windows
-vcpkg install gtsam:x64-windows glog:x64-windows gflags:x64-windows
-
-# Clone and build
-git clone https://github.com/sriram-0311/MC-SLAM.git
-cd MC-SLAM
-mkdir build && cd build
-
-# Configure with vcpkg
-cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
-         -DBUILD_WINDOWS_VERSION=ON ^
-         -DBUILD_ROS_VERSION=OFF
-
-# Build
-cmake --build . --config Release
-```
-
-#### Linux (Ubuntu 20.04+)
-```bash
-# Install dependencies
-sudo apt update
-sudo apt install cmake build-essential
-sudo apt install libopencv-dev libeigen3-dev libboost-all-dev
-sudo apt install libgtsam-dev libglog-dev libgflags-dev
-
-# Optional: Install ROS for ROS bag support
-# sudo apt install ros-noetic-desktop-full
-
-# Clone and build
-git clone https://github.com/sriram-0311/MC-SLAM.git
-cd MC-SLAM
-mkdir build && cd build
-
-# Configure
-cmake .. -DBUILD_WINDOWS_VERSION=ON -DBUILD_ROS_VERSION=OFF
-# Or for ROS support: cmake .. -DBUILD_ROS_VERSION=ON
-
-# Build
-make -j$(nproc)
-```
-
-*For detailed Windows setup, see [WINDOWS_BUILD.md](WINDOWS_BUILD.md)*
-
----
-
-## Usage
-
-### Basic SLAM Execution
-
-#### Windows - Video Streams
-```powershell
-# Run with live camera
-.\build\bin\MCSlamapp.exe --config_file params\config_windows.cfg
-
-# Run with video files
-.\build\bin\MCSlamapp.exe --config_file params\config_video.cfg
-```
-
-#### Linux - Dataset/ROS
-```bash
-# Windows-style (no ROS)
-./build/bin/MCSlamapp --config_file params/config_indoor.cfg
-
-# With ROS support (if built)
-./build/bin/MCSlamapp_ROS --config_file params/config_ros.cfg
-```
-
-### Configuration
-
-#### Windows Video Configuration
-```yaml
-# Camera/Video configuration
-images_path: "C:/path/to/video_config.txt"  # Video config file
-calib_file_path: "C:/path/to/calibration.yaml"
-use_cameras: true  # true for live cameras, false for video files
-
-# Video config file format (video_config.txt):
-# 0        # Camera index 0
-# 1        # Camera index 1
-# OR
-# C:/videos/cam0.mp4
-# C:/videos/cam1.mp4
-
-# SLAM parameters  
-imu: false          # Set to true if IMU simulation needed
-gps: false          # Set to true if GPS simulation needed
-loop_closure: true
-debug_mode: true
-```
-
-#### Linux/ROS Configuration
-```yaml
-# Standard ROS configuration
-data_path: /path/to/dataset
-calib_file_path: calibration.yaml
-ros: true           # Enable ROS mode
-parse_bag: true     # For ROS bag files
-
-# SLAM parameters
-imu: true
-gps: true
-loop_closure: true
-```
-
-### Supported Data Formats
-
-#### Windows
-- **Live cameras** via OpenCV VideoCapture (USB, integrated cameras)
-- **Video files** (MP4, AVI, MOV, etc.)
-- **Image sequences** with timestamps
-- **Simulated IMU/GPS** data for testing
-
-#### Linux  
-- **ROS Bags** with synchronized multi-camera streams
-- **Live ROS topics** for real-time processing
-- **Image sequences** with timestamp synchronization
-- **All Windows formats** (when built without ROS)
-
----
-
-## System Architecture
-
-```mermaid
-graph TB
-    A[Multi-Camera Input] --> B[Feature Extraction]
-    B --> C[Intra-Match Computation]
-    C --> D[Pose Estimation]
-    D --> E[Bundle Adjustment]
-    E --> F[Loop Closure Detection]
-    F --> G[Global Optimization]
-    
-    H[IMU Data] --> I[Pre-integration]
-    I --> D
-    
-    J[GPS Data] --> K[Global Alignment]
-    K --> G
-    
-    L[Semantic Masks] --> B
-    
-    subgraph "Windows Input"
-        M[VideoStreamReader]
-        N[Live Cameras]
-        O[Video Files]
-    end
-    
-    subgraph "Linux Input"
-        P[RosDataReader]
-        Q[RosbagParser]
-        R[DatasetReader]
-    end
-    
-    M --> A
-    N --> M
-    O --> M
-    P --> A
-    Q --> A
-    R --> A
-```
-
-### Core Components
-
-| Module | Responsibility | Windows | Linux |
-|--------|---------------|---------|-------|
-| **VideoStreamReader** | Video/camera input without ROS | ? | ? |
-| **RosDataReader** | Live ROS topic reading | ? | ? |
-| **RosbagParser** | ROS bag file parsing | ? | ? |
-| **DatasetReader** | Image sequence reading | ? | ? |
-| **FrontEnd** | Visual odometry, feature tracking | ? | ? |
-| **Backend** | Bundle adjustment, optimization | ? | ? |
-| **MultiCameraFrame** | Multi-view processing | ? | ? |
-
----
-
-## Performance
-
-### Accuracy
-- **Translation Error**: < 1% of trajectory length on standard datasets
-- **Rotation Error**: < 0.01 rad/m on indoor sequences  
-- **Loop Closure**: > 95% precision with < 0.1% false positives
-
-### Efficiency
-- **Real-time processing** at 10+ Hz on modern hardware
-- **Memory efficient** landmark management with adaptive culling
-- **Scalable** to 5+ camera configurations
-- **Cross-platform** optimized builds
-
----
-
-## Build Options
-
-### CMake Configuration Options
+Build the source dependencies into a prefix (for example `~/opt/<name>`). Then:
 
 ```bash
-# Windows-focused build
-cmake .. -DBUILD_WINDOWS_VERSION=ON -DBUILD_ROS_VERSION=OFF
-
-# Linux with ROS support
-cmake .. -DBUILD_ROS_VERSION=ON -DBUILD_WINDOWS_VERSION=ON
-
-# Minimal dependencies
-cmake .. -DBUILD_TESTS=OFF -DBUILD_TEST_SCRIPTS=OFF
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_PREFIX_PATH="$HOME/opt/gtsam-4.3;$HOME/opt/opengv;$HOME/opt/DBoW2;$HOME/opt/DLib;$HOME/opt/DLoopDetector;$HOME/opt/fbow;$HOME/opt/Pangolin"
+cmake --build build
+(cd build && ctest)            # 19 unit tests
 ```
 
-### Optional Dependencies
+Options: `-DMCSLAM_WITH_VIEWER=OFF` builds without Pangolin; `-DMCSLAM_BUILD_TESTS=OFF` skips the tests.
 
-| Feature | Dependency | Impact if Missing |
-|---------|------------|-------------------|
-| Advanced SLAM | GTSAM | Reduced optimization capabilities |
-| Loop Closure | DBoW2 | No visual place recognition |
-| 3D Visualization | Pangolin | No real-time 3D viewer |
-| GPS Support | GeographicLib | Limited GPS functionality |
-| Logging | glog/gflags | Basic console logging only |
+## Running on EuRoC
 
----
+The scripts expect sequences in ASL format under `~/datasets/euroc/<SEQ>/mav0` with a
+`gt_tum.txt` ground truth (`scripts/euroc_gt_to_tum.py`), and the ORB vocabularies
+(`ORBvoc.txt`, `orb_mur.fbow`) in `~/datasets/vocab`.
 
-## Contributing
+```bash
+# stereo only, headless: trajectory, timing CSV and evo APE/RPE in results/mh01
+scripts/run_euroc.sh MH_01_easy results/mh01 --deterministic
 
-We welcome contributions! Here's how you can help:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/AmazingFeature`)
-3. **Commit** your changes (`git commit -m 'Add AmazingFeature'`)
-4. **Push** to the branch (`git push origin feature/AmazingFeature`)
-5. **Open** a Pull Request
-
-### Development Guidelines
-- Follow C++17 standard
-- Ensure cross-platform compatibility (Windows/Linux)
-- Add unit tests for new features
-- Update documentation for API changes
-- Test with both ROS and non-ROS builds
-
----
-
-## Documentation
-
-- **[Windows Build Guide](WINDOWS_BUILD.md)** - Detailed Windows setup instructions
-- **[Data Collection](Datacollection.md)** - Instructions for dataset creation
-- **[Data Processing](dataprocessing.md)** - Data preparation and processing steps
-- **[Configuration Examples](MCApps/params/)** - Sample configuration files
-
----
-
-## Citation
-
-If you use MC-SLAM in your research, please cite:
-
-```bibtex
-@software{mcslam2024,
-  title={MC-SLAM: Multi-Camera Simultaneous Localization and Mapping},
-  author={Kaveti, Pushyami and others},
-  year={2024},
-  url={https://github.com/sriram-0311/MC-SLAM}
-}
+# stereo + IMU, with the 3D map viewer
+IMU=1 VIEWER=1 scripts/run_euroc.sh V1_01_easy results/v101
 ```
 
----
+Environment knobs of `run_euroc.sh`:
 
-## Support
+| Knob | Meaning |
+|---|---|
+| `IMU` | 0 = stereo only, 1 = stereo + IMU |
+| `VIEWER` | 1 = show the Pangolin viewer |
+| `KF_ROT_DEG` | keyframe rotation threshold |
+| `RANSAC_PX` | tracking RANSAC threshold |
+| `BACKEND_PARAMS` | alternative back-end YAML |
 
-- **Issues**: [GitHub Issues](https://github.com/sriram-0311/MC-SLAM/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/sriram-0311/MC-SLAM/discussions)
+Parameters live in `params/euroc/`.
 
----
+## Layout
 
-## License
+| Path | Contents |
+|---|---|
+| `MCSlam/` | front end (tracking, mapping), back end (iSAM2, smart factors, IMU), loop closure, relocalization, stereo-inertial alignment, viewer |
+| `MCDataUtils/` | dataset readers (EuRoC, multi-camera image folders), Kalibr calibration loading |
+| `MCApps/` | `mcslam_app` and `vi_align_check`, a tool that checks the stereo-inertial alignment against EuRoC ground truth |
+| `tests/` | GTest unit tests (triangulation, factors, vocabulary, EuRoC reader, stereo-inertial alignment) |
+| `scripts/` | EuRoC run and evaluation scripts |
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Known issues
 
----
+- With the IMU, iSAM2 rejects many incremental updates (6-92 per sequence) as indeterminate,
+  mostly near velocity variables. The full problem is well conditioned at the moment of failure
+  (`MCSLAM_DEBUG_ILS=1` logs the smallest Hessian eigenvalues). The update is recovered by
+  re-solving in batch, but this costs accuracy and time on the machine-hall sequences.
+- V2_03 (fast motion, motion blur) still loses visual tracking repeatedly.
 
-## Acknowledgments
+## License and citation
 
-- **ORB-SLAM** team for foundational SLAM concepts
-- **GTSAM** library for factor graph optimization
-- **DBoW2** for visual vocabulary implementation
-- **OpenGV** library for geometric vision algorithms
-- **OpenCV** community for computer vision tools
-
----
-
-<div align="center">
-
-**Built with ?? by the Neufield Robotics Team**
-
-[![GitHub stars](https://img.shields.io/github/stars/sriram-0311/MC-SLAM.svg?style=social&label=Star)](https://github.com/sriram-0311/MC-SLAM)
-
-</div>
-
-
-
-
-
-
-
-
-
-
-
+MIT License, copyright (c) 2022 NEU Field Robotics Lab (see [LICENSE](LICENSE)). If you use
+MC-SLAM, please cite the original authors' work.
