@@ -147,6 +147,9 @@ public:
     void rebuildIsamFromScratch();
     int total_isam_rebuilds = 0;
     void diagnoseIndeterminateSystem();
+    /// Restarts the graph at the last keyframe as the first stereo+IMU state (after the
+    /// stereo-inertial alignment); its pose, velocity and bias priors are added with the next keyframe.
+    void restartInertial(const gtsam::Vector3& velocity, const gtsam::imuBias::ConstantBias& bias);
 
     void removeVariables( gtsam::KeyVector tobeRemoved);
     void updateVariables();
@@ -166,11 +169,17 @@ public:
     void markSmartFactorAffected(int lid, gtsam::Key pose_key);
     // true if the pose of this keyframe is in iSAM2 or waiting in the pending initial estimate
     bool poseInGraph(int kfID) const;
+    bool keyInGraph(gtsam::Key key) const;
     /// The smart factor of a landmark, ready to take a new measurement. With replace_smart_factors_ a
     /// factor already in iSAM2 is not mutated in place: it is copied, the copy is submitted with the
     /// next update and the old slot is removed.
     RigFactor::shared_ptr mutableSmartFactor(int lid);
     bool replace_smart_factors_ = false;
+    MultiCameraFrame* keyframeById(int kfID) const;
+    // stereo+IMU: give a keyframe whose pose/velocity/bias are missing from the graph (dropped by an
+    // iSAM2 reset, or a vision re-initialization keyframe) values and loose priors before an IMU
+    // factor references it
+    void anchorInertialState(int kfID);
     // vision-only: weak between factor from the front-end relative pose of the last two keyframes
     void addOdometryFactor(MultiCameraFrame* prevKF, MultiCameraFrame* curKF);
     // vision-only: bring a re-initialization keyframe that never entered the graph into it

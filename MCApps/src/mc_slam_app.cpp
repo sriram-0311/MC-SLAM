@@ -105,6 +105,10 @@ int main(int argc , char** argv){
                                  settings.imu, settings.gps, settings.relocalization, settings.customVocabFile,
                                  settings.dataBase, settings.graphLogs, settings.mapLogs, settings.navability, settings.ImuMapFrame);
     slam_frontend->setDeterministic(FLAGS_deterministic);
+    // With an IMU, start with stereo only and switch once the stereo-inertial alignment succeeds
+    // (no static start needed). The legacy static IMU initialization is kept for relocalization.
+    if (settings.imu && !settings.relocalization)
+        slam_frontend->enableVisualInertialBootstrap();
     VLOG(0) << "slam_frontend initialized" <<endl;
     // create the SLAM backend object
     Backend *slam_backend;
@@ -181,7 +185,10 @@ bool updateData(FrontEnd& frontend, DatasetReaderBase &dataReader) {
             dataReader.getNext(imgs, timeStamp, imu_msgs);
         }
          VLOG(0) << " imu msgs size" << imu_msgs.size() << endl;
-        if(!frontend.imu_initialized){
+        if(frontend.vi_bootstrap_){
+            frontend.vi_imu_buffer_.insert(frontend.vi_imu_buffer_.end(), imu_msgs.begin(), imu_msgs.end());
+        }
+        else if(!frontend.imu_initialized){
             frontend.imu_initialize(imu_msgs, timeStamp);
         }
         else{
@@ -363,7 +370,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
 //                backend.GlobalRelocalizedPoseNode();
                 backend.poseCounter++;
                 // reset IMU preintegration object
-//                frontend.imu_integrator_comb->resetIntegrationAndSetBias(backend.prevBias_);
+//                frontend.resetImuIntegration(backend.prevBias_);
             }
             else{
                 frontend.reset();
@@ -454,7 +461,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
                 backend.prev_Kf = frontend.lfFrames.back()->kfID;
                 backend.poseCounter++;
                 // reset IMU preintegration object
-                frontend.imu_integrator_comb->resetIntegrationAndSetBias(backend.prevBias_);
+                frontend.resetImuIntegration(backend.prevBias_);
             }
             else{
                 frontend.reset();
@@ -616,7 +623,7 @@ void process_frames(FrontEnd& frontend, Backend& backend){
                     backend.prevState_ = next_state;
 
                     // reset imu preintegration object
-                    frontend.imu_integrator_comb->resetIntegrationAndSetBias(backend.prevBias_);
+                    frontend.resetImuIntegration(backend.prevBias_);
                 }
                 frontend.first_keyframe = false;
             }
@@ -713,6 +720,14 @@ void process_frames(FrontEnd& frontend, Backend& backend){
    optim_time+=duration.count();
    if(optimtize_){
         VLOG(1)<<"Total time taken for Back-end optimization: "<<duration.count()<<" | Average: "<<(optim_time/optim_cnt)<<endl;
+   }
+
+   // stereo-inertial start-up: try to align once the new keyframe has been optimized
+   if(frontend.vi_bootstrap_ && new_kf && frontend.initialized_ == INITIALIZED){
+       gtsam::Vector3 v_last;
+       gtsam::imuBias::ConstantBias bias;
+       if(frontend.tryVisualInertialInit(v_last, bias))
+           backend.restartInertial(v_last, bias);
    }
 
 

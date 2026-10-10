@@ -3,6 +3,7 @@
 //
 #include "MCSlam/FrontEnd.h"
 #include <unordered_set>
+#include "MCSlam/VisualInertialAlignment.h"
 #include "MCSlam/LoopCloser.h"
 #include <DUtils/DUtils.h>
 
@@ -916,6 +917,106 @@ double FrontEnd::trackingRansacThreshold() const
     if (ransac_threshold_px_ > 0)
         return 1.0 - cos(atan(ransac_threshold_px_ / camconfig_.K_mats_[0].at<double>(0,0)));
     return 1.0 - cos(atan(sqrt(2.0)*0.5/camconfig_.K_mats_[0].at<double>(0,2)));
+}
+
+void FrontEnd::enableVisualInertialBootstrap()
+{
+    vi_bootstrap_ = true;
+    useIMU = false;            // stereo-only tracking and back end until the alignment succeeds
+    imu_initialized = false;
+    vi_imu_buffer_.clear();
+}
+
+bool FrontEnd::tryVisualInertialInit(gtsam::Vector3& v_last, gtsam::imuBias::ConstantBias& bias)
+{
+    // the most recent keyframes within the window, oldest first
+    std::vector<MultiCameraFrame*> kfs;
+    for (auto it = lfFrames.rbegin(); it != lfFrames.rend(); ++it) {
+        if ((*it)->dummy_kf)
+            continue;
+        if (!kfs.empty() && kfs.front()->timeStamp - (*it)->timeStamp > vi_window_s_)
+            break;
+        kfs.insert(kfs.begin(), *it);
+    }
+    if (kfs.size() < static_cast<size_t>(vi_min_keyframes_))
+        return false;
+    // keep the IMU buffer bounded to what a window can need
+    while (!vi_imu_buffer_.empty() && vi_imu_buffer_.front().timestamp < kfs.front()->timeStamp - 1.0)
+        vi_imu_buffer_.pop_front();
+
+    mcslam::ViAlignmentInput in;
+    const cv::Mat T_cb = Tbc_cv.inv();
+    for (auto kf : kfs) {
+        cv::Mat w_T_b = kf->pose * T_cb;
+        in.kf_times.push_back(kf->timeStamp);
+        in.w_T_b.push_back(convertPose3_CV2GTSAM(w_T_b));
+    }
+    in.imu.assign(vi_imu_buffer_.begin(), vi_imu_buffer_.end());
+    in.params = gtsam::PreintegrationParams::MakeSharedU(g_norm);
+    in.params->setAccelerometerCovariance(gtsam::I_3x3 * std::pow(acc_n, 2));
+    in.params->setGyroscopeCovariance(gtsam::I_3x3 * std::pow(gyr_n, 2));
+    in.params->setIntegrationCovariance(gtsam::I_3x3 * 1e-8);
+    const mcslam::ViAlignmentResult res = mcslam::alignVisualInertial(in);
+    vi_attempts_++;
+    if (!res.success) {
+        VLOG(0) << "Visual-inertial alignment rejected (attempt " << vi_attempts_ << "): " << res.reason;
+        return false;
+    }
+
+    // Rotate the map about the origin so that gravity points along -z.
+    cv::Mat R3;
+    cv::eigen2cv(gtsam::Matrix3(res.g_R_w.matrix()), R3);
+    cv::Mat R4 = cv::Mat::eye(4, 4, CV_64F);
+    R3.copyTo(R4(cv::Range(0, 3), cv::Range(0, 3)));
+    for (auto f : lfFrames)
+        f->pose = R4 * f->pose;
+    if (std::find(lfFrames.begin(), lfFrames.end(), currentFrame) == lfFrames.end())
+        currentFrame->pose = R4 * currentFrame->pose;
+    for (auto &P : allPoses) P = R3 * P;
+    for (auto &P : combined_poses) P = R3 * P;
+    if (!currentFramePose.empty()) currentFramePose = R3 * currentFramePose;
+    if (!last_tracked_pose_.empty()) last_tracked_pose_ = R4 * last_tracked_pose_;
+    for (auto &kv : map->mapPoints) {
+        Landmark* l = kv.second;
+        if (l == nullptr) continue;
+        if (!l->pt3D.empty()) l->pt3D = R3 * l->pt3D;
+        if (!l->normal.empty()) l->normal = R3 * l->normal;
+    }
+
+    // IMU state at the last keyframe; the accelerometer bias is left to the factor graph.
+    bias = gtsam::imuBias::ConstantBias(gtsam::Vector3::Zero(), res.gyro_bias);
+    v_last = res.velocities.back();
+    imu_initialize_noise(bias);
+    // loose accelerometer-bias prior (EuRoC biases reach ~0.5 m/s^2), tight gyro-bias prior
+    bias_noise_model = gtsam::noiseModel::Diagonal::Sigmas(
+            (gtsam::Vector(6) << gtsam::Vector3::Constant(0.2), gtsam::Vector3::Constant(5e-3)).finished());
+    priorVelNoise = gtsam::noiseModel::Isotropic::Sigma(3, 0.1);
+
+    // hand the IMU stream over from the last keyframe on
+    const double t_k = kfs.back()->timeStamp;
+    {
+        unique_lock<mutex> lock(mMutexImu);
+        imu_msgs_combined.clear();
+        for (const auto &m : vi_imu_buffer_)
+            if (m.timestamp > t_k)
+                imu_msgs_combined.push_back(m);
+        last_imu_time = t_k;
+    }
+    vi_imu_buffer_.clear();
+    useIMU = true;
+    imu_initialized = true;
+    first_keyframe = false;
+    vi_bootstrap_ = false;
+    VLOG(0) << "Visual-inertial initialization at KF " << kfs.back()->kfID << " after " << vi_attempts_
+            << " attempts: " << kfs.size() << " KFs, |g| " << res.gravity_norm_unconstrained
+            << ", gyro bias " << res.gyro_bias.transpose() << ", v " << v_last.transpose()
+            << ", rot rms " << res.rotation_rms_deg << " deg, pos rms " << res.position_rms << " m";
+    return true;
+}
+
+void FrontEnd::resetImuIntegration(const gtsam::imuBias::ConstantBias& bias)
+{
+    imu_integrator_comb->resetIntegrationAndSetBias(bias);
 }
 
 void FrontEnd::setDeterministic(bool on)
@@ -4065,10 +4166,14 @@ void FrontEnd::imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias)
     params->biasOmegaCovariance = gtsam::I_3x3 * pow(gyr_w, 2);
     params->omegaCoriolis = w_coriolis;
 
-    double integration_sigma = 1e-8;
-    params->setIntegrationCovariance( gtsam::I_3x3 * pow(integration_sigma, 2) );  //1e-8
+    // position-integration noise (GTSAM's example variance, sigma 1e-4); the former variance of 1e-16
+    // turned the position part of every IMU factor into a near-hard constraint (info ~1e16), which left
+    // iSAM2 numerically indeterminate around the velocity/bias variables
+    double integration_sigma = 1e-4;
+    params->setIntegrationCovariance( gtsam::I_3x3 * pow(integration_sigma, 2) );
 
-    params->biasAccOmegaInt = gtsam::I_6x6 * 1e2;// 1e-5;
+    // unused since GTSAM 4.3 (superseded by the prior on the first bias); kept at GTSAM's example value
+    params->biasAccOmegaInt = gtsam::I_6x6 * 1e-5;
 
     priorPoseNoise  = gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad,m, m, m
     priorVelNoise   = gtsam::noiseModel::Isotropic::Sigma(3, 0.1); // m/s

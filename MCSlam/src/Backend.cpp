@@ -1800,6 +1800,42 @@ RigFactor::shared_ptr Backend::mutableSmartFactor(int lid) {
     return sf;
 }
 
+bool Backend::keyInGraph(gtsam::Key key) const {
+    return currentEstimate.exists(key) || initialEstimate.exists(key);
+}
+
+MultiCameraFrame* Backend::keyframeById(int kfID) const {
+    for (auto it = frontEnd->lfFrames.rbegin(); it != frontEnd->lfFrames.rend(); ++it)
+        if ((*it)->kfID == kfID)
+            return *it;
+    return nullptr;
+}
+
+void Backend::anchorInertialState(int kfID) {
+    const gtsam::Key x = gtsam::Symbol('x', kfID), v = gtsam::Symbol('v', kfID), b = gtsam::Symbol('b', kfID);
+    if (keyInGraph(x) && keyInGraph(v) && keyInGraph(b))
+        return;
+    MultiCameraFrame* kf = keyframeById(kfID);
+    if (kf == nullptr)
+        return;
+    VLOG(0) << "Anchoring inertial state of x" << kfID << " (missing from the graph)";
+    if (!keyInGraph(x)) {
+        cv::Mat w_T_b = kf->pose * frontEnd->Tbc_cv.inv();
+        const gtsam::Pose3 pose = convertPose3_CV2GTSAM(w_T_b);
+        initialEstimate.insert(x, pose);
+        graph.push_back(gtsam::PriorFactor<gtsam::Pose3>(x, pose, gtsam::noiseModel::Diagonal::Sigmas(
+                (gtsam::Vector(6) << gtsam::Vector3::Constant(0.05), gtsam::Vector3::Constant(0.1)).finished())));
+    }
+    if (!keyInGraph(v)) {
+        initialEstimate.insert(v, prevVel_);
+        graph.push_back(gtsam::PriorFactor<gtsam::Vector3>(v, prevVel_, gtsam::noiseModel::Isotropic::Sigma(3, 0.5)));
+    }
+    if (!keyInGraph(b)) {
+        initialEstimate.insert(b, prevBias_);
+        graph.push_back(gtsam::PriorFactor<gtsam::imuBias::ConstantBias>(b, prevBias_, frontEnd->bias_noise_model));
+    }
+}
+
 bool Backend::poseInGraph(int kfID) const {
     const gtsam::Key key = gtsam::Symbol('x', kfID);
     return currentEstimate.exists(key) || initialEstimate.exists(key);
@@ -2826,9 +2862,19 @@ void Backend::addIMUFactor(int prev_kf, int curr_kf){
         }
         return;
     }
+    anchorInertialState(prev_kf);
 
     //combined imu factors
     auto preint_imu_combined = dynamic_cast<const gtsam::PreintegratedCombinedMeasurements&>(*frontEnd->imu_integrator_comb);
+    {
+        const gtsam::Matrix cov = preint_imu_combined.preintMeasCov();
+        const double dt = preint_imu_combined.deltaTij();
+        const double min_eig = Eigen::SelfAdjointEigenSolver<gtsam::Matrix>(cov).eigenvalues().minCoeff();
+        if (!cov.allFinite() || !(dt > 0) || !(min_eig > 0))
+            VLOG(0) << "Abnormal IMU factor " << prev_kf << "->" << curr_kf << ": dt " << dt
+                    << ", finite " << cov.allFinite() << ", min cov eig " << min_eig;
+        VLOG(1) << "IMU factor " << prev_kf << "->" << curr_kf << " dt " << dt << " min cov eig " << min_eig;
+    }
     gtsam::CombinedImuFactor imu_factor(gtsam::Symbol('x', prev_kf ), gtsam::Symbol('v', prev_kf ),
                                         gtsam::Symbol('x', curr_kf ), gtsam::Symbol('v', curr_kf ),
                                         gtsam::Symbol('b', prev_kf ), gtsam::Symbol('b', curr_kf ), preint_imu_combined);
@@ -2850,7 +2896,10 @@ void Backend::addIMUFactor(int prev_kf, int curr_kf){
     VLOG(0) << "Predicted estimate for x" << curr_kf << " is: \n"<<next_state.pose()<<endl;
     VLOG(0) <<" lf frames pose is : \n" << frontEnd->lfFrames[frontEnd->lfFrames.size() - 1]->pose << endl;
 
-    Mat currentPoseMat = frontEnd->lfFrames[frontEnd->lfFrames.size() - 1]->pose * frontEnd->Tbc_cv.inv();
+    MultiCameraFrame* curr_frame = keyframeById(curr_kf);
+    if (curr_frame == nullptr)
+        curr_frame = frontEnd->lfFrames.back();
+    Mat currentPoseMat = curr_frame->pose * frontEnd->Tbc_cv.inv();
     gtsam::Pose3 currentPose = convertPose3_CV2GTSAM(currentPoseMat);
     if(!initialEstimate.exists(gtsam::Symbol('x', curr_kf))){
         VLOG(0) << "next estimate sent from IMU!!" ;
@@ -3218,6 +3267,19 @@ void Backend::resetGraph() {
     gps_factor_count=0;
 }
 
+void Backend::restartInertial(const gtsam::Vector3& velocity, const gtsam::imuBias::ConstantBias& bias) {
+    resetGraph();
+    MultiCameraFrame* kf = frontEnd->lfFrames.back();
+    cv::Mat w_T_b = kf->pose * frontEnd->Tbc_cv.inv();
+    prev_Kf = kf->kfID;
+    prevPose_ = convertPose3_CV2GTSAM(w_T_b);
+    prevVel_ = velocity;
+    prevBias_ = bias;
+    prevState_ = gtsam::NavState(prevPose_, prevVel_);
+    frontEnd->lastState_ = prevState_;
+    frontEnd->lastBias_ = prevBias_;
+}
+
 bool Backend::optimizePosesLandmarks() {
     if(optimizationMethod == 0){
         try {
@@ -3242,7 +3304,7 @@ bool Backend::optimizePosesLandmarks() {
                     prevState_ = gtsam::NavState(prevPose_, prevVel_);
 
                     // reset imu preintegration object
-                    frontEnd->imu_integrator_comb->resetIntegrationAndSetBias(prevBias_);
+                    frontEnd->resetImuIntegration(prevBias_);
                     return false;
                 }
             }
@@ -3329,7 +3391,7 @@ bool Backend::optimizePosesLandmarks() {
                 prevState_ = gtsam::NavState(prevPose_, prevVel_);
 
                 // reset imu preintegration object
-                frontEnd->imu_integrator_comb->resetIntegrationAndSetBias(prevBias_);
+                frontEnd->resetImuIntegration(prevBias_);
 
                 VLOG(0) << "current Estimate for v" << prev_Kf << " is : " << prevVel_ << endl;
                 VLOG(0) << "current Estimate for b" << prev_Kf << " is : " << prevBias_ << endl;
@@ -3416,6 +3478,15 @@ bool Backend::optimizePosesLandmarks() {
 
             if(std::getenv("MCSLAM_DEBUG_ILS"))
                 diagnoseIndeterminateSystem();
+            if(frontEnd->useIMU){
+                // The failed update consumed the preintegration up to the current keyframe, where the
+                // graph restarts: predict its state, restart the preintegration there, and anchor the
+                // new graph with the latest bias estimate.
+                prevState_ = frontEnd->imu_integrator_comb->predict(prevState_, prevBias_);
+                prevVel_ = prevState_.v();
+                frontEnd->bias_prior = prevBias_;
+                frontEnd->resetImuIntegration(prevBias_);
+            }
             resetGraph();
             VLOG(0) << "Exception caught : " << e.what() << std::endl;
             VLOG(0)<<"Resetting ISAM";
@@ -3469,7 +3540,7 @@ bool Backend::optimizePosesLandmarks() {
             }
             prevState_ = gtsam::NavState(prevPose_, prevVel_);
             // reset imu preintegration object
-            frontEnd->imu_integrator_comb->resetIntegrationAndSetBias(prevBias_);
+            frontEnd->resetImuIntegration(prevBias_);
         }
     }
 

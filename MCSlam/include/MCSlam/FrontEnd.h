@@ -151,6 +151,11 @@ public:
         kf_translation_threshold = (double)fSettings["KFBaselineThresholdTranslation"];
 
         kf_rotation_threshold = (double)fSettings["KFBaselineThresholdRotation"];
+        // Inflation of the calibrated (datasheet) IMU noise densities and bias random walks
+        if (!fSettings["IMU.NoiseScale"].empty())
+            imu_noise_scale_ = (double)fSettings["IMU.NoiseScale"];
+        if (!fSettings["IMU.RandomWalkScale"].empty())
+            imu_walk_scale_ = (double)fSettings["IMU.RandomWalkScale"];
 
         // Reprojection threshold [px] of the tracking RANSAC. Unset keeps the legacy value (~0.9 px on EuRoC).
         if (!fSettings["Tracking.RansacThresholdPx"].empty())
@@ -261,6 +266,10 @@ public:
                 imuNode["gyr_noise"] >> gyr_n;
                 imuNode["gyr_walk"] >> gyr_w;
                 imuNode["g_norm"] >> g_norm;
+                acc_n *= imu_noise_scale_;
+                gyr_n *= imu_noise_scale_;
+                acc_w *= imu_walk_scale_;
+                gyr_w *= imu_walk_scale_;
                 Mat_<double> R = Mat_<double>::zeros(3,3);
                 Mat_<double> t = Mat_<double>::zeros(3,1);
                 FileNode tn = imuNode["Tbc"];
@@ -560,6 +569,7 @@ public:
     double kf_translation_threshold;
     double kf_rotation_threshold;
     double ransac_threshold_px_ = -1.0;
+    double imu_noise_scale_ = 1.0, imu_walk_scale_ = 1.0;
     double trackingRansacThreshold() const;
 
     int current_frameId, currentKFID;
@@ -618,10 +628,24 @@ public:
     Eigen::MatrixXd kabsch(Eigen::MatrixXd A, Eigen::MatrixXd B);
     void imu_initialize_noise(gtsam::imuBias::ConstantBias prior_imu_bias);
     void imu_initialize(std::deque<mcslam::ImuSample> imu_msgs, double image_time);
+
+    // Stereo-inertial start-up without a static window: track with stereo only (IMU samples are
+    // buffered) until alignVisualInertial explains the recent keyframes, then rotate the map into
+    // the gravity frame and switch to stereo+IMU.
+    void enableVisualInertialBootstrap();
+    /// Tries the alignment on the most recent keyframes. On success the map is gravity-aligned, the
+    /// IMU stream starts at the last keyframe, and its velocity and bias are returned.
+    bool tryVisualInertialInit(gtsam::Vector3& v_last, gtsam::imuBias::ConstantBias& bias);
+    bool vi_bootstrap_ = false;
+    std::deque<mcslam::ImuSample> vi_imu_buffer_;
+    double vi_window_s_ = 3.0;       // keyframe window used for the alignment [s]
+    int vi_min_keyframes_ = 5;
+    int vi_attempts_ = 0;
     void imu_values_removal(double image_time);
     void imu_preintegration(double image_time);
     bool imu_initialized = false;
     gtsam::PreintegratedCombinedMeasurements *imu_integrator_comb;
+    void resetImuIntegration(const gtsam::imuBias::ConstantBias& bias);
     double last_imu_time = -1;
     gtsam::imuBias::ConstantBias prior_imu_bias;
     Eigen::Matrix3d world_imu_rotation = Eigen::Matrix3d::Zero();

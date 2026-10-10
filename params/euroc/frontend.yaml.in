@@ -38,3 +38,8 @@ Viewer.ViewpointX: 0
 Viewer.ViewpointY: -0.7
 Viewer.ViewpointZ: -1.8
 Viewer.ViewpointF: 500
+
+# Inflation of the calibrated IMU noise densities and bias random walks (datasheet values are
+# optimistic for a vibrating MAV; x2 / x10 cut the stereo+IMU ATE on MH_03 from 1.4 m to 0.45 m)
+IMU.NoiseScale: 2.0
+IMU.RandomWalkScale: 10.0
