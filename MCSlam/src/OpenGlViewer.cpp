@@ -203,9 +203,16 @@ void OpenGlViewer::goLive(){
 
        // DrawCurrentCamera(Twc_mono, 1.0, 0.0, 1.0);
        // DrawAllCameras(true);
-        //show the 3D reconstructed points
-//        if(menuShowPoints)
-//            DrawMapPoints();
+        // landmarks (snapshot published by the SLAM thread after each keyframe)
+        if(menuShowPoints){
+            const std::vector<cv::Point3f> pts = frontEnd->getMapPoints();
+            glPointSize(2);
+            glBegin(GL_POINTS);
+            glColor3f(0.75f, 0.75f, 0.75f);
+            for (const auto& p : pts)
+                glVertex3f(p.x, p.y, p.z);
+            glEnd();
+        }
 
         pangolin::FinishFrame();
 
@@ -224,7 +231,7 @@ void OpenGlViewer::goLive(){
             menuReset = false;
         }
 
-        if(CheckFinish())
+        if(CheckFinish() || pangolin::ShouldQuit())
             break;
     }
     setFinish();

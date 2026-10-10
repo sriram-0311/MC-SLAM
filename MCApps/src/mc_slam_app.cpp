@@ -120,6 +120,7 @@ int main(int argc , char** argv){
    } else {
    OpenGlViewer* glViewer;
    glViewer = new OpenGlViewer(settings.frontend_params_file, slam_frontend);
+   slam_frontend->publish_map_points_ = true;
    if (!settings.relocalization)
         auto *viewerThread = new thread(&OpenGlViewer::goLive, glViewer);
    else
@@ -722,6 +723,9 @@ void process_frames(FrontEnd& frontend, Backend& backend){
         VLOG(1)<<"Total time taken for Back-end optimization: "<<duration.count()<<" | Average: "<<(optim_time/optim_cnt)<<endl;
    }
 
+   if(frontend.publish_map_points_ && new_kf && frontend.initialized_ == INITIALIZED)
+       frontend.publishMapPoints();
+
    // stereo-inertial start-up: try to align once the new keyframe has been optimized
    if(frontend.vi_bootstrap_ && new_kf && frontend.initialized_ == INITIALIZED){
        gtsam::Vector3 v_last;
@@ -788,13 +792,12 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
             if(success){
                 process_frames(frontend, backend);
             } else{
-
-                //continue;
-                destroyAllWindows();
-                glViewer.requestFinish();
+                // end of the sequence: keep the map on screen until the viewer window is closed
+                LOG(INFO) << "End of sequence; close the viewer window to exit";
                 while(!glViewer.isFinished()){
-                    usleep(5000);
+                    usleep(50000);
                 }
+                destroyAllWindows();
                 return ;
             }
 

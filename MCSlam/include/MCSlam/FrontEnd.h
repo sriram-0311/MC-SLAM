@@ -453,6 +453,12 @@ public:
 
 
     cv::Mat getPose();
+    // Landmark positions for the viewer thread: the SLAM thread publishes a snapshot after each
+    // keyframe (the map itself is not safe to read concurrently).
+    bool publish_map_points_ = false;
+    void publishMapPoints();
+    std::vector<cv::Point3f> getMapPoints();
+    std::vector<cv::Point3f> map_points_snapshot_;
     cv::Mat getPose_gp3p();  //Relative pose
     vector<cv::Mat> getAllPoses_gp3p();
     vector<cv::Mat> getAllPoses();

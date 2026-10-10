@@ -513,6 +513,24 @@ void FrontEnd::processFrame() {
 
 /// Method which returns the latest estimated pose
 /// \return
+void FrontEnd::publishMapPoints(){
+    std::vector<cv::Point3f> pts;
+    pts.reserve(map->mapPoints.size());
+    for (const auto& kv : map->mapPoints) {
+        const Landmark* l = kv.second;
+        if (l == nullptr || l->pt3D.empty())
+            continue;
+        pts.emplace_back(l->pt3D.at<double>(0), l->pt3D.at<double>(1), l->pt3D.at<double>(2));
+    }
+    unique_lock<mutex> lock(mMutexPoints);
+    map_points_snapshot_.swap(pts);
+}
+
+std::vector<cv::Point3f> FrontEnd::getMapPoints(){
+    unique_lock<mutex> lock(mMutexPoints);
+    return map_points_snapshot_;
+}
+
 cv::Mat FrontEnd::getPose(){
     unique_lock<mutex> lock(mMutexPose);
     return currentFramePose;
@@ -972,9 +990,12 @@ bool FrontEnd::tryVisualInertialInit(gtsam::Vector3& v_last, gtsam::imuBias::Con
         f->pose = R4 * f->pose;
     if (std::find(lfFrames.begin(), lfFrames.end(), currentFrame) == lfFrames.end())
         currentFrame->pose = R4 * currentFrame->pose;
-    for (auto &P : allPoses) P = R3 * P;
-    for (auto &P : combined_poses) P = R3 * P;
-    if (!currentFramePose.empty()) currentFramePose = R3 * currentFramePose;
+    {
+        unique_lock<mutex> lock(mMutexPose);  // the viewer thread reads these
+        for (auto &P : allPoses) P = R3 * P;
+        for (auto &P : combined_poses) P = R3 * P;
+        if (!currentFramePose.empty()) currentFramePose = R3 * currentFramePose;
+    }
     if (!last_tracked_pose_.empty()) last_tracked_pose_ = R4 * last_tracked_pose_;
     for (auto &kv : map->mapPoints) {
         Landmark* l = kv.second;
@@ -1453,7 +1474,10 @@ bool FrontEnd::initialization(){
                         VLOG(2)<<"fraction of Triangulation/number of matches"<<(float)num_triangulated/inter_matches.size();
                         VLOG(2)<<"fraction of Triangulation/pose inliers"<<(float)num_triangulated/num_initial_inliers;
                         //insert the two LF frames as keyframes
-                        currentFramePose = T(cv::Range(0,3),cv::Range(0,4)).clone();
+                        {
+                            unique_lock<mutex> lock(mMutexPose);
+                            currentFramePose = T(cv::Range(0,3),cv::Range(0,4)).clone();
+                        }
                         currentFrame->pose = T.clone();
 
                         lf_prev->numTrackedLMs = num_triangulated;
@@ -1493,6 +1517,7 @@ bool FrontEnd::initialization(){
                 initializationTrials = 0;
                 // the initialization was not successful
                 // delete the frame from lfFrames and insert the currentframe.
+                unique_lock<mutex> lock(mMutexPose);
                 lfFrames.pop_back();
                 allPoses.pop_back();
                 combined_poses.pop_back();
@@ -3553,7 +3578,10 @@ bool FrontEnd::trackFrame(){
 
         prev_KF->numTrackedLMs = prev_KF->numTrackedLMs + num_triangulated ;
         currentFrame->numTrackedLMs = num_inliers + num_triangulated ;
-        currentFramePose =  currentFrame->pose.rowRange(0,3).clone();        //T.rowRange(0, 3).clone();
+        {
+            unique_lock<mutex> lock(mMutexPose);  // the viewer thread reads it (getPose)
+            currentFramePose = currentFrame->pose.rowRange(0,3).clone();
+        }
 
         currentFrame->num_matches_refKF = inter_matches.size();
         currentFrame->num_matches_refKF_lms = inter_matches_with_landmarks.size();

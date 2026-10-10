@@ -11,6 +11,7 @@
 #   KF_ROT_DEG [5]                  keyframe rotation threshold (deg), tuning knob
 #   RANSAC_PX  [0.88]               tracking RANSAC threshold (px), tuning knob
 #   BACKEND_PARAMS [params/euroc/backend.yaml]  alternative back-end yaml (copied into out_dir)
+#   VIEWER     [0]                  1 = show the Pangolin map viewer (needs a display)
 #   IMU        [0]                  1 = stereo+IMU (needs a VI initializer; not yet working on EuRoC)
 set -euo pipefail
 
@@ -27,6 +28,7 @@ IMU=${IMU:-0}
 KF_ROT_DEG=${KF_ROT_DEG:-5}
 RANSAC_PX=${RANSAC_PX:-0.88}
 BACKEND_PARAMS=${BACKEND_PARAMS:-}
+VIEWER=${VIEWER:-0}
 PARAMS=$REPO/params/euroc
 SEQ_DIR=$EUROC_DIR/$SEQ
 
@@ -49,7 +51,9 @@ render "$PARAMS/frontend.yaml.in" "$OUT/frontend.yaml"
 echo "[$SEQ] running -> $OUT"
 start=$(date +%s.%N)
 set +e
-(cd "$OUT" && "$BUILD_DIR/bin/mcslam_app" --config_file="$OUT/run.cfg" --headless \
+MODE=--headless
+[[ $VIEWER == 1 ]] && MODE=--noheadless
+(cd "$OUT" && "$BUILD_DIR/bin/mcslam_app" --config_file="$OUT/run.cfg" $MODE \
     --traj_file="$OUT/traj_cam0.txt" --body_traj_file="$OUT/traj_body.txt" \
     --timing_file="$OUT/timing.csv" "$@") > "$OUT/run.log" 2>&1
 status=$?
