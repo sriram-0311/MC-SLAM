@@ -53,6 +53,8 @@ DEFINE_string(timing_file, "", "if set, write per-frame stage timings (CSV)");
 DEFINE_int32(max_frames, 0, "stop after this many frames (0 = whole sequence)");
 DEFINE_bool(no_backend_feedback, false, "debug: do not write back-end estimates into the front-end map");
 DEFINE_bool(deterministic, false, "seed RANSAC with a fixed value so repeated runs give the same result");
+DEFINE_string(record_dir, "", "viewer mode: save the tracking view, pose and processing time of every frame and a "
+                              "map snapshot per keyframe here (input for scripts/make_video.py)");
 DEFINE_bool(headless, false, "run without the Pangolin viewer / keyboard loop (for benchmarks)");
 
 mcslam::FrameTiming g_timing;
@@ -749,6 +751,14 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
     // initialize
     bool initialized = false;
     float time_per_frame = 0.0;
+    // --record_dir: frame index, timestamp, processing time and keyframe flag for every frame
+    std::ofstream record_csv;
+    int record_n = 0;
+    if (!FLAGS_record_dir.empty()) {
+        record_csv.open(FLAGS_record_dir + "/frames.csv");
+        record_csv << "frame,timestamp,process_ms,keyframe,lost,"
+                      "r00,r01,r02,tx,r10,r11,r12,ty,r20,r21,r22,tz\n";
+    }
 
     //need this - vlog values?
     while (true) {
@@ -788,13 +798,24 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
         if(live){
             auto startT = high_resolution_clock::now();
             //update the new Camera data to corresponding objects
-            bool success = updateData(frontend, dataReader);
+            const bool record = record_csv.is_open();
+            bool success = !(record && FLAGS_max_frames > 0 && record_n >= FLAGS_max_frames)
+                           && updateData(frontend, dataReader);
+            // currentFrame may be released by process_frames (non-keyframes), so read its time here
+            const double frame_time = success ? frontend.currentFrame->timeStamp : 0.0;
 
             if(success){
+                g_timing = mcslam::FrameTiming{};
                 process_frames(frontend, backend);
-                if(frontend.show_tracking_ && !frontend.tracking_view_.empty())
-                    cv::imshow("MC-SLAM tracking (green: tracked map points, red: rejected, grey: new)",
-                               frontend.tracking_view_);
+            } else if (record) {
+                // recording: stop at the end of the sequence instead of waiting for the window to close
+                record_csv.close();
+                glViewer.requestFinish();
+                while(!glViewer.isFinished()){
+                    usleep(5000);
+                }
+                destroyAllWindows();
+                return ;
             } else{
                 // end of the sequence: keep the map on screen until the viewer window is closed
                 LOG(INFO) << "End of sequence; close the viewer window to exit";
@@ -807,6 +828,32 @@ void handleKeyboardInput(FrontEnd& frontend, Backend& backend, DatasetReaderBase
 
             auto stopT = high_resolution_clock::now();
             auto duration = duration_cast<milliseconds>(stopT - startT);
+            if(frontend.show_tracking_ && !frontend.tracking_view_.empty())
+                cv::imshow("MC-SLAM tracking (green: tracked map points, red: rejected, grey: new)",
+                           frontend.tracking_view_);
+            if (record && !frontend.tracking_view_.empty()) {
+                char name[32];
+                snprintf(name, sizeof(name), "/track_%06d.jpg", record_n);
+                cv::imwrite(FLAGS_record_dir + name, frontend.tracking_view_, {cv::IMWRITE_JPEG_QUALITY, 92});
+                record_csv << record_n << ',' << std::fixed << std::setprecision(6) << frame_time
+                           << ',' << std::setprecision(2)
+                           << duration_cast<microseconds>(stopT - startT).count() / 1e3 << ','
+                           << g_timing.keyframe << ',' << frontend.tracking_failure_;
+                cv::Mat pose;
+                frontend.getPose().convertTo(pose, CV_64F);   // world <- camera rig, 3x4
+                for (int r = 0; r < 3; ++r)
+                    for (int c = 0; c < 4; ++c)
+                        record_csv << ',' << pose.at<double>(r, c);
+                record_csv << std::endl;
+                if (g_timing.keyframe) {   // map snapshot after every keyframe: float32 xyz
+                    frontend.publishMapPoints();
+                    const std::vector<cv::Point3f> pts = frontend.getMapPoints();
+                    snprintf(name, sizeof(name), "/points_%06d.bin", record_n);
+                    std::ofstream(FLAGS_record_dir + name, std::ios::binary)
+                        .write(reinterpret_cast<const char*>(pts.data()), pts.size() * sizeof(cv::Point3f));
+                }
+                ++record_n;
+            }
             time_per_frame += duration.count();
             VLOG(1)<<"Time taken per frame : "<<duration.count()<<" | Average: "<<  (time_per_frame/seq)<<endl;
             auto avg_fps = (1/((time_per_frame/seq)/1000));
