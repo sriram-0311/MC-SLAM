@@ -143,6 +143,10 @@ public:
     bool optimizePosesLandmarks();
     /// Discards the iSAM2 instance and every bookkeeping structure tied to it.
     void resetGraph();
+    /// Re-eliminates iSAM2's complete factor graph in batch after a failed incremental update.
+    void rebuildIsamFromScratch();
+    int total_isam_rebuilds = 0;
+    void diagnoseIndeterminateSystem();
 
     void removeVariables( gtsam::KeyVector tobeRemoved);
     void updateVariables();
@@ -162,6 +166,11 @@ public:
     void markSmartFactorAffected(int lid, gtsam::Key pose_key);
     // true if the pose of this keyframe is in iSAM2 or waiting in the pending initial estimate
     bool poseInGraph(int kfID) const;
+    /// The smart factor of a landmark, ready to take a new measurement. With replace_smart_factors_ a
+    /// factor already in iSAM2 is not mutated in place: it is copied, the copy is submitted with the
+    /// next update and the old slot is removed.
+    RigFactor::shared_ptr mutableSmartFactor(int lid);
+    bool replace_smart_factors_ = false;
     // vision-only: weak between factor from the front-end relative pose of the last two keyframes
     void addOdometryFactor(MultiCameraFrame* prevKF, MultiCameraFrame* curKF);
     // vision-only: bring a re-initialization keyframe that never entered the graph into it

@@ -70,6 +70,8 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
 
     huberModel = noiseModel::Robust::Create(noiseModel::mEstimator::Huber::Create(
             sqrt(5.991)), measurementNoise);
+    if (!fSettings["SmartFactorReplaceOnUpdate"].empty())
+        replace_smart_factors_ = (int)fSettings["SmartFactorReplaceOnUpdate"] != 0;
     if (!fSettings["SmartFactorPixelSigma"].empty())
         smart_pixel_sigma_ = (double)fSettings["SmartFactorPixelSigma"];
     if (!fSettings["OdometrySigmaRot"].empty())
@@ -92,6 +94,10 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
         //parameters.optimizationParams = ISAM2DoglegParams(1.0, 1e-5, DoglegOptimizerImpl::SEARCH_EACH_ITERATION);
         parameters.relinearizeThreshold = (double)fSettings["ISAMRelinearizeThreshold"];
         parameters.relinearizeSkip = (int)fSettings["ISAMRelinearizeSkip"];
+        // Smart factors re-triangulate their point at every linearization, so cached linear factors
+        // go stale and mix with fresh ones; iSAM2 then hits spurious IndeterminantLinearSystem errors
+        // although the full problem is well conditioned (see GTSAM's ISAM2Example_SmartFactor).
+        parameters.cacheLinearizedFactors = false;
         // CHOLESKY: the rig smart factors only linearize to (semi-definite) Hessian factors, which
         // QR cannot eliminate without failing on their rank deficiency
         parameters.factorization = gtsam::ISAM2Params::CHOLESKY;
@@ -1780,6 +1786,20 @@ void Backend::process_SmartFactor(MultiCameraFrame* currentFrame, GlobalMap* map
 }
 
 
+RigFactor::shared_ptr Backend::mutableSmartFactor(int lid) {
+    RigFactor::shared_ptr& sf = smartFactor[lid];
+    const auto slot = lm_to_facInds.find(lid);
+    if (replace_smart_factors_ && slot != lm_to_facInds.end()) {
+        toBeRemovedFactorIndices.push_back(slot->second);
+        factorNewAffectedKeys.erase(slot->second);
+        lm_to_facInds.erase(slot);
+        sf = std::make_shared<RigFactor>(*sf);
+        newFactor_to_lm[graph.size()] = lid;
+        graph.push_back(sf);
+    }
+    return sf;
+}
+
 bool Backend::poseInGraph(int kfID) const {
     const gtsam::Key key = gtsam::Symbol('x', kfID);
     return currentEstimate.exists(key) || initialEstimate.exists(key);
@@ -1865,7 +1885,7 @@ void Backend::insertSmartFactorinGraph(int lid, vector<int> compcam_ids, IntraMa
 
         int featIdx = im->matchIndex[cam_id];
         gtsam::Point2 measurement = convertPoint2_CV2GTSAM(currentFrame->image_kps_undist[cam_id][featIdx]);
-        smartFactor[lid]->add(measurement, gtsam::Symbol('x', kf_id), cam_id);
+        mutableSmartFactor(lid)->add(measurement, gtsam::Symbol('x', kf_id), cam_id);
     }
 
 }
@@ -1940,7 +1960,7 @@ void Backend::addLoopClosure(int curr_frame_id){
             assert(meas.x() >= 0 && meas.y() >= 0);
 
             // add the smart factor
-            smartFactor[matched_lid]->add(meas, gtsam::Symbol('x', curr_frame_id), comp_cam_id);
+            mutableSmartFactor(matched_lid)->add(meas, gtsam::Symbol('x', curr_frame_id), comp_cam_id);
             VLOG(0) << "added measurement for lid " << matched_lid << " to x" << curr_frame_id << " for cam " << comp_cam_id << endl;
 
         }
@@ -3109,6 +3129,71 @@ bool Backend::addKeyFrameNov(){
 
 
 
+void Backend::diagnoseIndeterminateSystem() {
+    // Debug only (MCSLAM_DEBUG_ILS): find the near-null directions of the full problem
+    // (iSAM2's factors plus the batch that failed) and the variables they live on.
+    gtsam::NonlinearFactorGraph all;
+    for (const auto& f : isam.getFactorsUnsafe())
+        if (f) all.push_back(f);
+    all.push_back(graph);
+    gtsam::Values vals = isam.getLinearizationPoint();
+    for (const auto& kv : initialEstimate)
+        if (!vals.exists(kv.key)) vals.insert(kv.key, kv.value);
+    gtsam::KeyVector keys;
+    for (const auto& k : all.keys())
+        if (vals.exists(k)) keys.push_back(k);
+    gtsam::Ordering ord(keys);
+    std::vector<std::pair<gtsam::Key, int>> cols;
+    for (auto k : keys) cols.push_back({k, static_cast<int>(vals.at(k).dim())});
+    gtsam::Matrix H;
+    try {
+        H = all.linearize(vals)->hessian(ord).first;
+    } catch (const std::exception& e) {
+        VLOG(0) << "ILS diagnosis: linearization failed: " << e.what();
+        return;
+    }
+    Eigen::SelfAdjointEigenSolver<gtsam::Matrix> es(H);
+    VLOG(0) << "ILS diagnosis: " << keys.size() << " variables, dim " << H.rows()
+            << ", eigenvalues min " << es.eigenvalues()(0) << " max " << es.eigenvalues()(H.rows() - 1);
+    for (int e = 0; e < 4 && e < H.rows(); ++e) {
+        const gtsam::Vector vec = es.eigenvectors().col(e);
+        std::vector<std::pair<double, std::string>> mass;
+        int c = 0;
+        for (auto& kc : cols) {
+            mass.push_back({vec.segment(c, kc.second).squaredNorm(), gtsam::DefaultKeyFormatter(kc.first)});
+            c += kc.second;
+        }
+        std::sort(mass.rbegin(), mass.rend());
+        std::ostringstream os;
+        for (int i = 0; i < 4 && i < static_cast<int>(mass.size()); ++i)
+            os << " " << mass[i].second << ":" << std::setprecision(2) << mass[i].first;
+        VLOG(0) << "ILS diagnosis: eigenvalue " << es.eigenvalues()(e) << " on" << os.str();
+    }
+}
+
+void Backend::rebuildIsamFromScratch() {
+    // After a failed update iSAM2 already holds the new factors and variables (they are added before
+    // elimination), so its factor graph and linearization point describe the complete problem.
+    gtsam::NonlinearFactorGraph all;
+    for (const auto& f : isam.getFactorsUnsafe())
+        if (f) all.push_back(f);
+    const gtsam::Values theta = isam.getLinearizationPoint();
+    isam = gtsam::ISAM2(parameters);
+    const auto result = isam.update(all, theta);  // throws again if the problem really is singular
+    // factor slots changed: re-derive the landmark -> slot map from the smart factor pointers
+    std::unordered_map<const gtsam::NonlinearFactor*, size_t> slot;
+    for (size_t i = 0; i < all.size(); ++i)
+        slot[all[i].get()] = result.newFactorsIndices.at(i);
+    lm_to_facInds.clear();
+    for (const auto& kv : smartFactor) {
+        const auto it = slot.find(kv.second.get());
+        if (it != slot.end())
+            lm_to_facInds[kv.first] = it->second;
+    }
+    newFactor_to_lm.clear();
+    factorNewAffectedKeys.clear();
+}
+
 void Backend::resetGraph() {
     isam.clear();
     lmFactorRecordMulti.clear();
@@ -3135,7 +3220,6 @@ void Backend::resetGraph() {
 
 bool Backend::optimizePosesLandmarks() {
     if(optimizationMethod == 0){
-        ISAM2 isam2 = ISAM2(isam);
         try {
 
             VLOG(0) << "isam update";
@@ -3188,12 +3272,21 @@ bool Backend::optimizePosesLandmarks() {
             updateParams.newAffectedKeys = std::move(factorNewAffectedKeys);
             updateParams.removeFactorIndices = toBeRemovedFactorIndices;
 
-            auto result = isam.update(graph, initialEstimate, updateParams);
-
-            //From the result grab the indices of the newly added factors in the isam's factor graph
-            // this will come in handy when we want to refer to them later
-            for (const auto &f2l : newFactor_to_lm)
-                lm_to_facInds[f2l.second] = result.newFactorsIndices.at(f2l.first);
+            try {
+                auto result = isam.update(graph, initialEstimate, updateParams);
+                // slots of the newly added smart factors in iSAM2's factor graph
+                for (const auto &f2l : newFactor_to_lm)
+                    lm_to_facInds[f2l.second] = result.newFactorsIndices.at(f2l.first);
+            }
+            catch (IndeterminantLinearSystemException& e) {
+                // The full problem is usually well conditioned when this happens (iSAM2's incremental
+                // elimination reuses stale smart-factor information). Re-eliminate everything in batch
+                // instead of discarding the graph; if that fails too, the handler below resets.
+                VLOG(0) << "iSAM2 update failed near " << gtsam::DefaultKeyFormatter(e.nearbyVariable())
+                        << ", rebuilding the Bayes tree in batch";
+                rebuildIsamFromScratch();
+                total_isam_rebuilds++;
+            }
             // consumed by this update; the next batch starts from an empty graph
             newFactor_to_lm.clear();
             factorNewAffectedKeys.clear();
@@ -3321,6 +3414,8 @@ bool Backend::optimizePosesLandmarks() {
             VLOG(0) << "current isam ILS errors = " << total_isam_errors << endl;
 
 
+            if(std::getenv("MCSLAM_DEBUG_ILS"))
+                diagnoseIndeterminateSystem();
             resetGraph();
             VLOG(0) << "Exception caught : " << e.what() << std::endl;
             VLOG(0)<<"Resetting ISAM";
