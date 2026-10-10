@@ -70,6 +70,10 @@ Backend::Backend(string strSettingsFile, CamArrayConfig &camconfig, FrontEnd *fe
 
     huberModel = noiseModel::Robust::Create(noiseModel::mEstimator::Huber::Create(
             sqrt(5.991)), measurementNoise);
+    if (!fSettings["LandmarkRefreshTrans"].empty())
+        lm_refresh_trans_ = (double)fSettings["LandmarkRefreshTrans"];
+    if (!fSettings["LandmarkRefreshRotDeg"].empty())
+        lm_refresh_rot_ = (double)fSettings["LandmarkRefreshRotDeg"] * M_PI / 180.0;
     if (!fSettings["SmartFactorReplaceOnUpdate"].empty())
         replace_smart_factors_ = (int)fSettings["SmartFactorReplaceOnUpdate"] != 0;
     if (!fSettings["SmartFactorPixelSigma"].empty())
@@ -3691,7 +3695,10 @@ void Backend::UpdateVariables_SmartFactors(){
                 Mat rotvec;
                 cv::Rodrigues(diffPose.rowRange(0, 3).colRange(0, 3), rotvec);
 
-                if (cv::norm(diffPose.col(3).rowRange(0,3)) > 0.005 or cv::norm(rotvec) > 1e-06) {
+                // Re-triangulate this keyframe's landmarks only if the optimisation really moved it
+                // (the former 1e-6 rad threshold selected every keyframe after every update, so the
+                // whole map was re-triangulated per keyframe and the cost grew with the map).
+                if (cv::norm(diffPose.col(3).rowRange(0,3)) > lm_refresh_trans_ or cv::norm(rotvec) > lm_refresh_rot_) {
                     VLOG(3) << "diff in pose of x" << poseid << " rot : " << rotvec << " trans: " << diffPose.col(3)
                             << endl;
                     fms.push_back(fr);
@@ -3756,8 +3763,8 @@ void Backend::UpdateVariables_SmartFactors(){
             auto measurements = sf->measured();
             TriangulationResult triangulate_check = sf->triangulateSafe(cameras);
             if(triangulate_check.valid()){
-
-                gtsam::Point3 landmark = gtsam::triangulatePoint3(cameras, measurements);
+                // triangulateSafe already solved (and cached) the point; don't triangulate twice
+                const gtsam::Point3 landmark = *triangulate_check;
 
                 cv::Mat landmark_point = (cv::Mat_<double>(3,1) << landmark.x(), landmark.y(), landmark.z());
 

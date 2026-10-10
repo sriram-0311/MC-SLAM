@@ -16,6 +16,11 @@ SmartFactorPixelSigma: 1.0
 # with stereo+IMU (MH_03: 28 -> 12 incremental failures, ATE 28 -> 7 cm)
 SmartFactorReplaceOnUpdate: 1
 SmartFactorOutlierPx: 5.0
+# After each update, re-triangulate the landmarks of a keyframe only if the optimisation moved it by
+# more than this (m, deg). The old fixed 5 mm / 1e-6 rad picked every keyframe, so the whole map was
+# re-triangulated per keyframe: EuRoC stereo keyframe cost 447 -> 231 ms on MH_01, wall -20% overall.
+LandmarkRefreshTrans: 0.01
+LandmarkRefreshRotDeg: 0.1
 SmartFactorMaxDistance: 20.0
 
 # Stereo only: loose link (rad, m) from the last keyframe in the graph to the keyframe vision

@@ -175,6 +175,8 @@ public:
     /// next update and the old slot is removed.
     RigFactor::shared_ptr mutableSmartFactor(int lid);
     bool replace_smart_factors_ = false;
+    // keyframe motion [m, rad] after an update above which its landmarks are re-triangulated
+    double lm_refresh_trans_ = 0.01, lm_refresh_rot_ = 1.745e-3;
     MultiCameraFrame* keyframeById(int kfID) const;
     // stereo+IMU: give a keyframe whose pose/velocity/bias are missing from the graph (dropped by an
     // iSAM2 reset, or a vision re-initialization keyframe) values and loose priors before an IMU
