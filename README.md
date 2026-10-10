@@ -72,6 +72,14 @@ took 243 ms and 20 GB of RAM. It now runs at 71 ms with 4.7 GB. The main fixes, 
   - About 3,800 lines of dead front-end code removed.
   - The map viewer works again.
 
+## Place recognition: JEPA vs. DBoW2
+
+[`tools/place_recognition`](tools/place_recognition) benchmarks learned image representations
+against the DBoW2 bag of words that MC-SLAM uses for loop closure and relocalization. The
+benchmark uses all 11 EuRoC sequences, with ground-truth "same place" labels. Read at the right
+depth (block 28 of 32), I-JEPA beats DBoW2 by 65% in loop-closure AP and doubles its
+cross-session relocalization AP, close to DINOv2.
+
 ## Building
 
 Tested on Ubuntu 24.04 with GCC 11 and CMake 3.28.
@@ -132,6 +140,7 @@ Parameters live in `params/euroc/`.
 | `MCApps/` | `mcslam_app` and `vi_align_check`, a tool that checks the stereo-inertial alignment against EuRoC ground truth |
 | `tests/` | GTest unit tests (triangulation, factors, vocabulary, EuRoC reader, stereo-inertial alignment) |
 | `scripts/` | EuRoC run and evaluation scripts |
+| `tools/place_recognition/` | JEPA / DINOv2 / DBoW2 place-recognition benchmark on EuRoC (Python) |
 
 ## Known issues
 

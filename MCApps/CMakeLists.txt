@@ -8,3 +8,7 @@ target_link_libraries(mcslam_app PRIVATE MCSlamCore Boost::program_options)
 # Offline check of the stereo-inertial alignment against EuRoC ground truth
 add_executable(vi_align_check src/vi_align_check.cpp)
 target_link_libraries(vi_align_check PRIVATE MCSlamCore)
+
+# DBoW2 bag-of-words vectors of images (baseline for the place-recognition benchmark)
+add_executable(bow_vectors src/bow_vectors.cpp)
+target_link_libraries(bow_vectors PRIVATE MCSlamCore)
