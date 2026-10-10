@@ -1,6 +1,7 @@
 set(MCSLAM_SOURCES
   src/Backend.cpp
   src/FrontEnd.cpp
+  src/EmbeddingTable.cpp
   src/GlobalMap.cpp
   src/LoopCloser.cpp
   src/MultiCameraFrame.cpp

@@ -151,6 +151,13 @@ public:
         kf_translation_threshold = (double)fSettings["KFBaselineThresholdTranslation"];
 
         kf_rotation_threshold = (double)fSettings["KFBaselineThresholdRotation"];
+        // Loop-closure candidates from precomputed learned descriptors instead of DBoW2 (empty: DBoW2)
+        if (!fSettings["LoopClosure.EmbeddingFile"].empty())
+            lc_embedding_file_ = (std::string)fSettings["LoopClosure.EmbeddingFile"];
+        if (!fSettings["LoopClosure.EmbeddingAlpha"].empty())
+            lc_embedding_alpha_ = (double)fSettings["LoopClosure.EmbeddingAlpha"];
+        if (!fSettings["LoopClosure.EmbeddingMinScore"].empty())
+            lc_embedding_min_score_ = (double)fSettings["LoopClosure.EmbeddingMinScore"];
         // Inflation of the calibrated (datasheet) IMU noise densities and bias random walks
         if (!fSettings["IMU.NoiseScale"].empty())
             imu_noise_scale_ = (double)fSettings["IMU.NoiseScale"];
@@ -576,6 +583,8 @@ public:
     double kf_rotation_threshold;
     double ransac_threshold_px_ = -1.0;
     double imu_noise_scale_ = 1.0, imu_walk_scale_ = 1.0;
+    std::string lc_embedding_file_;
+    double lc_embedding_alpha_ = 0.85, lc_embedding_min_score_ = 0.5;
     double trackingRansacThreshold() const;
 
     int current_frameId, currentKFID;

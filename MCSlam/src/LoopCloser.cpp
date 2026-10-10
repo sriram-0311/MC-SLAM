@@ -1,4 +1,5 @@
 
+#include <iomanip>
 #include "MCSlam/LoopCloser.h"
 // TODO: Check for inliers based on % rather than a values.
 // TODO: Decouple DloopDetector.
@@ -75,6 +76,7 @@ bool LoopCloser::callerDetectLoop(MultiCameraFrame *frame, GlobalMap* map, std::
     {
 //        createBoWandFeatVec(m_frame, curr_BoW, curr_FeatVec);
         orb_database->add(curr_BoW, curr_FeatVec);
+        addEntryEmbedding(m_frame);
         entryStamps.emplace_back(m_frame->timeStamp);
         m_image_intraMatches.push_back(m_frame->intraMatches);
         VLOG(0) << "Database size - " << orb_database->size() << std::endl;
@@ -88,6 +90,7 @@ bool LoopCloser::callerDetectLoop(MultiCameraFrame *frame, GlobalMap* map, std::
         {
 //            createBoWandFeatVec(k, curr_BoW, curr_FeatVec);
             orb_database->add(k->lfBoW, k->lfFeatVec);
+            addEntryEmbedding(k);
             entryStamps.emplace_back(k->timeStamp);
             m_image_intraMatches.push_back(k->intraMatches);
         }
@@ -108,20 +111,29 @@ bool LoopCloser::callerDetectLoop(MultiCameraFrame *frame, GlobalMap* map, std::
         int maxId = (int)entryId - dloop_param.dislocal;
 
         DBoW2::QueryResults qret;
-        orb_database->query(curr_BoW, qret, dloop_param.max_db_results, maxId);
+        double ns_factor = 1.0;
+        double alpha = dloop_param.alpha;
+        if(embeddings)
+        {
+            queryEmbeddings((int)entryId, maxId, qret, ns_factor);
+            alpha = embedding_alpha;
+        }
+        else
+        {
+            orb_database->query(curr_BoW, qret, dloop_param.max_db_results, maxId);
+            if(dloop_param.use_nss)
+                ns_factor = orb_database->getVocabulary()->score(curr_BoW, last_bowvec);
+        }
 
         if(!qret.empty())
         {
-            double ns_factor = 1.0;
-            if(dloop_param.use_nss)
-            {
-                ns_factor = orb_database->getVocabulary()->score(curr_BoW, last_bowvec);
-                VLOG(0) << "This is the ns_factor - " << ns_factor << std::endl;
-            }
+            VLOG(0) << "This is the ns_factor - " << ns_factor << std::endl;
             if(ns_factor >= dloop_param.min_nss_factor)
             {
                 // Remove the low scoring frames.
-                DorianLoopDetector::removeLowScores(qret, dloop_param.alpha * ns_factor);
+                DorianLoopDetector::removeLowScores(qret, alpha * ns_factor);
+                if(embeddings)
+                    DorianLoopDetector::removeLowScores(qret, embedding_min_score);
                 if(!qret.empty())
                 {
                     match.match = qret[0].Id;
@@ -145,6 +157,8 @@ bool LoopCloser::callerDetectLoop(MultiCameraFrame *frame, GlobalMap* map, std::
                             if(detection)
                             {
                                 match.status = DLoopDetector::LOOP_DETECTED;
+                                VLOG(0) << std::fixed << std::setprecision(6) << "LOOP_DETECTED query_t "
+                                        << entryStamps[entryId] << " match_t " << entryStamps[match.match];
                             }
                             else
                             {
@@ -189,6 +203,51 @@ bool LoopCloser::callerDetectLoop(MultiCameraFrame *frame, GlobalMap* map, std::
         last_bowvec = curr_BoW;
     }
     return match.detection();
+}
+
+void LoopCloser::addEntryEmbedding(const MultiCameraFrame* frame)
+{
+    if(!embeddings)
+        return;
+    const float* e = embeddings->lookup(frame->timeStamp);
+    if(e == nullptr)
+    {
+        LOG(WARNING) << "no place-recognition descriptor for keyframe at t=" << frame->timeStamp;
+        entry_emb_.emplace_back();
+        return;
+    }
+    entry_emb_.emplace_back(Eigen::Map<const Eigen::VectorXf>(e, embeddings->dim()));
+    if(emb_sum_.size() == 0)
+        emb_sum_ = Eigen::VectorXd::Zero(embeddings->dim());
+    emb_sum_ += entry_emb_.back().cast<double>();
+    ++emb_count_;
+}
+
+bool LoopCloser::queryEmbeddings(int queryId, int maxId, DBoW2::QueryResults& ret, double& ns) const
+{
+    ret.clear();
+    ns = 0.0;
+    if(queryId >= (int)entry_emb_.size() || entry_emb_[queryId].size() == 0 || emb_count_ == 0)
+        return false;
+    const Eigen::VectorXf mean = (emb_sum_ / emb_count_).cast<float>();
+    auto centred = [&mean](const Eigen::VectorXf& x) -> Eigen::VectorXf {
+        Eigen::VectorXf c = x - mean;
+        const float n = c.norm();
+        return n > 0 ? Eigen::VectorXf(c / n) : c;
+    };
+    const Eigen::VectorXf q = centred(entry_emb_[queryId]);
+    for(int i = 0; i <= maxId && i < (int)entry_emb_.size(); ++i)
+    {
+        if(entry_emb_[i].size() == 0)
+            continue;
+        ret.push_back(DBoW2::Result(i, q.dot(centred(entry_emb_[i]))));
+    }
+    std::sort(ret.begin(), ret.end(), [](const DBoW2::Result& a, const DBoW2::Result& b) { return a.Score > b.Score; });
+    if(dloop_param.max_db_results > 0 && (int)ret.size() > dloop_param.max_db_results)
+        ret.resize(dloop_param.max_db_results);
+    if(queryId > 0 && entry_emb_[queryId - 1].size() > 0)
+        ns = q.dot(centred(entry_emb_[queryId - 1]));
+    return true;
 }
 
 void LoopCloser::featureMatchesBow(const DBoW2::FeatureVector& curr_featVec,const DBoW2::FeatureVector& best_featVec,

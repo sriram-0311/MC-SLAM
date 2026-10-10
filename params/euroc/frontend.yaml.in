@@ -43,3 +43,9 @@ Viewer.ViewpointF: 500
 # optimistic for a vibrating MAV; x2 / x10 cut the stereo+IMU ATE on MH_03 from 1.4 m to 0.45 m)
 IMU.NoiseScale: 2.0
 IMU.RandomWalkScale: 10.0
+
+# Loop-closure candidates from precomputed learned descriptors (tools/place_recognition/
+# embed_sequence.py) instead of DBoW2; empty = DBoW2. Scores are centred cosines.
+LoopClosure.EmbeddingFile: "@LC_EMB_FILE@"
+LoopClosure.EmbeddingAlpha: @LC_EMB_ALPHA@
+LoopClosure.EmbeddingMinScore: @LC_EMB_MIN@

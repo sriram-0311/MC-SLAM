@@ -15,6 +15,8 @@
 #include "MCSlam/MultiCameraFrame.h"
 #include "MCSlam/GlobalMap.h"
 #include "MCSlam/utils.h"
+#include "MCSlam/EmbeddingTable.h"
+#include <memory>
 #include <DUtils/DUtils.h>
 #include <DVision/DVision.h>
 #include "TemplatedLoopDetector.h"
@@ -77,6 +79,13 @@ public:
     // false: seed the geometric-verification RANSAC with a fixed value (reproducible runs)
     bool ransac_random_seed = true;
 
+    // Candidate retrieval by learned global descriptors (e.g. I-JEPA) instead of the DBoW2 query.
+    // Scores are cosines of descriptors centred on the mean of the database; the rest of the
+    // pipeline (islands, temporal consistency, geometric verification) is unchanged.
+    std::shared_ptr<mcslam::EmbeddingTable> embeddings;
+    double embedding_alpha = 0.85;      // keep candidates >= alpha * similarity to the previous keyframe
+    double embedding_min_score = 0.5;   // and >= this absolute centred cosine
+
     /**
      * Multi-Camera Parameters.
      */
@@ -132,6 +141,16 @@ public:
      * @param extract
      */
     void setFeatureExtractor(ORBextractor* extract);
+
+private:
+    std::vector<Eigen::VectorXf> entry_emb_;  // per database entry; empty if no descriptor was found
+    Eigen::VectorXd emb_sum_;
+    int emb_count_ = 0;
+    void addEntryEmbedding(const MultiCameraFrame* frame);
+    // DBoW2-style query results (sorted, best first) over entries [0, maxId]; ns = score of the
+    // previous entry. Returns false if the current entry has no descriptor.
+    bool queryEmbeddings(int queryId, int maxId, DBoW2::QueryResults& ret, double& ns) const;
+public:
 
 
     ~LoopCloser() override {

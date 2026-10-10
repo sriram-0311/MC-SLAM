@@ -11,6 +11,8 @@
 #   KF_ROT_DEG [5]                  keyframe rotation threshold (deg), tuning knob
 #   RANSAC_PX  [0.88]               tracking RANSAC threshold (px), tuning knob
 #   BACKEND_PARAMS [params/euroc/backend.yaml]  alternative back-end yaml (copied into out_dir)
+#   LC_EMB_DIR []                   loop-closure descriptors <dir>/<SEQ>.bin instead of DBoW2
+#   LC_EMB_ALPHA, LC_EMB_MIN [0.85, 0.5]  their relative / absolute score thresholds
 #   VIEWER     [0]                  1 = show the Pangolin map viewer (needs a display)
 #   IMU        [0]                  1 = stereo+IMU (needs a VI initializer; not yet working on EuRoC)
 set -euo pipefail
@@ -29,6 +31,11 @@ KF_ROT_DEG=${KF_ROT_DEG:-5}
 RANSAC_PX=${RANSAC_PX:-0.88}
 BACKEND_PARAMS=${BACKEND_PARAMS:-}
 VIEWER=${VIEWER:-0}
+LC_EMB_DIR=${LC_EMB_DIR:-}
+LC_EMB_ALPHA=${LC_EMB_ALPHA:-0.85}
+LC_EMB_MIN=${LC_EMB_MIN:-0.5}
+LC_EMB_FILE=
+[[ -n $LC_EMB_DIR ]] && LC_EMB_FILE=$LC_EMB_DIR/$SEQ.bin
 PARAMS=$REPO/params/euroc
 SEQ_DIR=$EUROC_DIR/$SEQ
 
@@ -39,7 +46,8 @@ OUT=$(cd "$OUT" && pwd)
 render() {
   sed -e "s|@SEQ_DIR@|$SEQ_DIR|g" -e "s|@OUT_DIR@|$OUT|g" \
       -e "s|@PARAMS_DIR@|$PARAMS|g" -e "s|@VOCAB_DIR@|$VOCAB_DIR|g" \
-      -e "s|^imu=.*|imu=$IMU|" -e "s|@KF_ROT_DEG@|$KF_ROT_DEG|g" -e "s|@RANSAC_PX@|$RANSAC_PX|g" "$1" > "$2"
+      -e "s|^imu=.*|imu=$IMU|" -e "s|@KF_ROT_DEG@|$KF_ROT_DEG|g" -e "s|@RANSAC_PX@|$RANSAC_PX|g" \
+      -e "s|@LC_EMB_FILE@|$LC_EMB_FILE|g" -e "s|@LC_EMB_ALPHA@|$LC_EMB_ALPHA|g" -e "s|@LC_EMB_MIN@|$LC_EMB_MIN|g" "$1" > "$2"
 }
 render "$PARAMS/euroc_stereo_imu.cfg.in" "$OUT/run.cfg"
 if [[ -n $BACKEND_PARAMS ]]; then

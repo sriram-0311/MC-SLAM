@@ -1061,6 +1061,13 @@ void  FrontEnd::initializeLoopClosure()
     looper->dloop_param.min_Fpoints = 7;
 
     looper->setParams(looper->dloop_param);
+    if (!lc_embedding_file_.empty()) {
+        looper->embeddings = std::make_shared<mcslam::EmbeddingTable>(lc_embedding_file_);
+        looper->embedding_alpha = lc_embedding_alpha_;
+        looper->embedding_min_score = lc_embedding_min_score_;
+        LOG(INFO) << "Loop closure candidates from " << lc_embedding_file_ << " (" << looper->embeddings->size()
+                  << " frames x " << looper->embeddings->dim() << ")";
+    }
     looper->type = LoopCloser::ABSOLUTE_POSE;
     result.status = DLoopDetector::NO_GROUPS;
 }
