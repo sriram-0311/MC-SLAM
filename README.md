@@ -10,9 +10,10 @@ fork: I wrote the global relocalization, the fast tracking front end, and the po
 back end that serves it, and I have ported the system to GTSAM 4.3 and benchmarked and debugged it
 on EuRoC.
 
-<p align="center"><img src="docs/images/viewer_mh01.png" width="560" alt="MC-SLAM map viewer on EuRoC MH_01"></p>
-<p align="center"><sub>EuRoC MH_01, stereo only: keyframe trajectory (green), landmarks (grey),
-loop-closure candidates (blue).</sub></p>
+<p align="center"><img src="docs/images/mcslam_mh01.gif" width="640" alt="MC-SLAM running on EuRoC MH_01: map, stereo tracking view and per-frame processing time"></p>
+<p align="center"><sub>EuRoC MH_01, stereo only, the full 184 s sequence at 18× speed. The playback clock is the
+measured per-frame processing time (CPU only). Left: map and keyframe trajectory; right: stereo tracking
+view and per-frame processing time. Rendered with <code>scripts/make_video.py</code>.</sub></p>
 
 ## Results on EuRoC MAV
 
