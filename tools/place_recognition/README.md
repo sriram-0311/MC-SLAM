@@ -1,6 +1,6 @@
 # JEPA representations for place recognition (vs. DBoW2)
 
-Question: can a self-supervised JEPA image encoder replace MC-SLAM's DBoW2 bag of words as the
+Question: can a self-supervised JEPA image encoder replace VIO-SLAM's DBoW2 bag of words as the
 place-recognition front end for loop closure and relocalization?
 
 <p align="center"><img src="../../docs/images/place_recognition_pr.png" width="820" alt="Precision-recall curves"></p>
@@ -16,7 +16,7 @@ place-recognition front end for loop closure and relocalization?
   That is 2,368 queries, of which 1,098 have a true revisit.
 - **Relocalization:** each frame queries every *other* sequence of the same environment, for
   example MH_04 against MH_01. That is 8,094 queries, of which 4,482 have a true match. This is
-  the setting of MC-SLAM's global relocalization.
+  the setting of VIO-SLAM's global relocalization.
 - **Metrics:**
   - R@1: the top-1 match is correct, over queries that have a true match.
   - AP: area under the precision-recall curve of accepting the top-1 match above a score
@@ -33,7 +33,7 @@ place-recognition front end for loop closure and relocalization?
 
 | Method | Loop AP | Loop R@1 | Reloc AP | Reloc R@1 | Reloc AP, Vicon room 2 |
 |---|---|---|---|---|---|
-| DBoW2 ORB (MC-SLAM today) | 0.378 | 0.658 | 0.308 | 0.553 | 0.225 |
+| DBoW2 ORB (VIO-SLAM today) | 0.378 | 0.658 | 0.308 | 0.553 | 0.225 |
 | V-JEPA 2 ViT-L, block 16 of 24 | 0.442 | 0.638 | 0.438 | 0.572 | 0.268 |
 | I-JEPA ViT-g/16 (IN-22k), block 34 of 40 | 0.618 | | 0.616 | | 0.560 |
 | I-JEPA ViT-H/14 (IN-22k), block 26 of 32 | 0.609 | | 0.609 | | 0.559 |
@@ -83,5 +83,5 @@ $P evaluate.py --set ~/datasets/euroc_prset --emb ~/datasets/euroc_pr_emb dbow2 
 
 ## Next
 
-Feed the I-JEPA candidates into MC-SLAM's `LoopCloser`, keeping its geometric verification, and
+Feed the I-JEPA candidates into VIO-SLAM's `LoopCloser`, keeping its geometric verification, and
 measure the effect on trajectory error and on relocalization success.

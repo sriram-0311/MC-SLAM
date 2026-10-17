@@ -1,16 +1,16 @@
-# MC-SLAM: Multi-Camera SLAM
+# VIO-SLAM: Multi-Camera Visual-Inertial SLAM
 
 Feature-based SLAM for multi-camera rigs (stereo and larger arrays), with optional IMU fusion,
 DBoW2 loop closure and global relocalization. The back end is a GTSAM factor graph (iSAM2) with
 multi-camera smart projection factors.
 
-MC-SLAM was developed at the [NEU Field Robotics Lab](https://github.com/neufieldrobotics)
-(original author: Pushyami Kaveti). This repository is my (Anush Sriram Ramesh's) refurbished
-fork: I wrote the global relocalization, the fast tracking front end, and the pose-only factor-graph
+VIO-SLAM is built on MC-SLAM, developed at the [NEU Field Robotics Lab](https://github.com/neufieldrobotics)
+(original author: Pushyami Kaveti). This repository is my (Anush Sriram Ramesh's) continuation of
+it: I wrote the global relocalization, the fast tracking front end, and the pose-only factor-graph
 back end that serves it, and I have ported the system to GTSAM 4.3 and benchmarked and debugged it
 on EuRoC.
 
-<p align="center"><img src="docs/images/mcslam_mh01.gif" width="640" alt="MC-SLAM running on EuRoC MH_01: map, stereo tracking view and per-frame processing time"></p>
+<p align="center"><img src="docs/images/vioslam_mh01.gif" width="640" alt="VIO-SLAM running on EuRoC MH_01: map, stereo tracking view and per-frame processing time"></p>
 <p align="center"><sub>EuRoC MH_01, stereo only, the full 184 s sequence at 18× speed. The playback clock is the
 measured per-frame processing time (CPU only). Left: map and keyframe trajectory; right: stereo tracking
 view and per-frame processing time. Rendered with <code>scripts/make_video.py</code>.</sub></p>
@@ -76,7 +76,7 @@ took 243 ms and 20 GB of RAM. It now runs at 71 ms with 4.7 GB. The main fixes, 
 ## Place recognition: JEPA vs. DBoW2
 
 [`tools/place_recognition`](tools/place_recognition) benchmarks learned image representations
-against the DBoW2 bag of words that MC-SLAM uses for loop closure and relocalization. The
+against the DBoW2 bag of words that VIO-SLAM uses for loop closure and relocalization. The
 benchmark uses all 11 EuRoC sequences, with ground-truth "same place" labels. Read at the right
 depth (block 28 of 32), I-JEPA beats DBoW2 by 65% in loop-closure AP and doubles its
 cross-session relocalization AP, close to DINOv2.
@@ -154,4 +154,4 @@ Parameters live in `params/euroc/`.
 ## License and citation
 
 MIT License, copyright (c) 2022 NEU Field Robotics Lab (see [LICENSE](LICENSE)). If you use
-MC-SLAM, please cite the original authors' work.
+this code, please cite the original MC-SLAM authors' work.

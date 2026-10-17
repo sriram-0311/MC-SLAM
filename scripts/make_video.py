@@ -6,7 +6,7 @@ view), the trajectory estimated so far and the current camera. Right: the stereo
 and a live plot of the per-frame processing time. The video clock is the measured processing time
 (frames.csv) sped up by --speed, so the playback rate on screen is what the system really did.
 
-    scripts/make_video.py <record_dir> <out.mp4> --title "MC-SLAM · EuRoC MH_01_easy" --speed 3
+    scripts/make_video.py <record_dir> <out.mp4> --title "VIO-SLAM · EuRoC MH_01_easy" --speed 3
 
 Needs python3 with numpy, opencv and pillow, and gst-launch-1.0 with x264enc and mp4mux.
 """
@@ -177,7 +177,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rec")
     ap.add_argument("out")
-    ap.add_argument("--title", default="MC-SLAM")
+    ap.add_argument("--title", default="VIO-SLAM")
     ap.add_argument("--subtitle", default="stereo visual odometry · factor-graph back end · CPU only")
     ap.add_argument("--speed", type=float, default=3.0, help="playback speed over measured processing time")
     ap.add_argument("--camera_hz", type=float, default=20.0)
